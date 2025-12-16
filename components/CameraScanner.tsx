@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera, AlertTriangle } from 'lucide-react';
+import { Camera, AlertTriangle, Zap, ZapOff } from 'lucide-react';
 
 interface CameraScannerProps {
   onCapture: (base64Image: string) => void;
@@ -10,6 +10,14 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [hasTorch, setHasTorch] = useState(false);
+  const [isTorchOn, setIsTorchOn] = useState(false);
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
+
+  // Haptic feedback helper
+  const triggerHaptic = () => {
+    if (navigator.vibrate) navigator.vibrate(10);
+  };
 
   useEffect(() => {
     let currentStream: MediaStream | null = null;
@@ -31,9 +39,19 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           audio: false,
         });
         currentStream = stream;
+        setMediaStream(stream);
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
+
+        // Check for Torch capability
+        const track = stream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities() as any; // Cast to any because TS might not know torch yet
+        if (capabilities.torch) {
+          setHasTorch(true);
+        }
+
         setStreamError(null);
       } catch (err: any) {
         console.error("Error accessing camera:", err);
@@ -49,12 +67,32 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
     return () => {
       if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
+        currentStream.getTracks().forEach(track => {
+          track.stop();
+        });
       }
     };
   }, []);
 
+  const toggleTorch = async () => {
+    triggerHaptic();
+    if (mediaStream && hasTorch) {
+      const track = mediaStream.getVideoTracks()[0];
+      const newStatus = !isTorchOn;
+      try {
+        await track.applyConstraints({
+          advanced: [{ torch: newStatus } as any]
+        });
+        setIsTorchOn(newStatus);
+      } catch (err) {
+        console.error("Error toggling torch", err);
+      }
+    }
+  };
+
   const handleCapture = () => {
+    if (navigator.vibrate) navigator.vibrate(50); // Stronger feedback for capture
+    
     if (videoRef.current && canvasRef.current && !isProcessing) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -125,6 +163,20 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           100% { top: 100%; opacity: 0; }
         }
       `}</style>
+
+      {/* Torch Toggle - Top Right */}
+      {hasTorch && (
+        <button
+          onClick={toggleTorch}
+          className={`absolute top-4 right-4 z-20 w-10 h-10 rounded-full flex items-center justify-center transition-all pointer-events-auto ${
+            isTorchOn 
+            ? 'bg-brand-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.5)]' 
+            : 'bg-black/50 text-white backdrop-blur-md'
+          }`}
+        >
+          {isTorchOn ? <Zap size={18} fill="currentColor" /> : <ZapOff size={18} />}
+        </button>
+      )}
 
       {/* Capture Button */}
       <div className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-auto">

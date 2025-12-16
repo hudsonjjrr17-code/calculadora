@@ -1,7 +1,7 @@
 {
   "id": "supercalc-v1",
   "name": "Supermarket Calculadora",
-  "short_name": "SuperCalc",
+  "short_name": "Supermarket",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

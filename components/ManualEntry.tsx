@@ -12,7 +12,15 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
   const [operator, setOperator] = useState<string | null>(null);
   const [waitingForNewValue, setWaitingForNewValue] = useState(false);
 
+  // Native Android Haptic Feedback
+  const triggerHaptic = (ms: number = 10) => {
+    if (navigator.vibrate) {
+      navigator.vibrate(ms);
+    }
+  };
+
   const handleNumber = (num: string) => {
+    triggerHaptic(8); // Light vibration for numbers
     if (waitingForNewValue) {
       setDisplay(num);
       setWaitingForNewValue(false);
@@ -22,6 +30,7 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
   };
 
   const handleDecimal = () => {
+    triggerHaptic(8);
     if (waitingForNewValue) {
       setDisplay('0.');
       setWaitingForNewValue(false);
@@ -33,6 +42,7 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
   };
 
   const clear = () => {
+    triggerHaptic(15);
     setDisplay('0');
     setPrevValue(null);
     setOperator(null);
@@ -40,6 +50,7 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
   };
 
   const handleOperation = (op: string) => {
+    triggerHaptic(12); // Slightly stronger for operations
     const current = parseFloat(display);
 
     if (prevValue === null) {
@@ -65,6 +76,7 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
   };
 
   const handleEquals = () => {
+    triggerHaptic(20); // Stronger for equals
     if (operator && prevValue !== null) {
       const current = parseFloat(display);
       const result = calculate(prevValue, current, operator);
@@ -76,6 +88,7 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
   };
 
   const handleBackspace = () => {
+    triggerHaptic(10);
     if (waitingForNewValue) return;
     if (display.length === 1) {
       setDisplay('0');
@@ -85,6 +98,7 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
   };
 
   const addToCart = () => {
+    triggerHaptic(40); // Success vibration
     const value = parseFloat(display);
     if (value > 0) {
       onAddItem({
@@ -99,7 +113,7 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
   };
 
   // Helper for button styles
-  const btnBase = "h-16 rounded-2xl font-bold text-2xl transition-all active:scale-95 flex items-center justify-center select-none shadow-lg";
+  const btnBase = "h-16 rounded-2xl font-bold text-2xl transition-all active:scale-95 flex items-center justify-center select-none shadow-lg touch-manipulation";
   const btnNum = `${btnBase} bg-dark-800 text-white hover:bg-dark-900 shadow-black/40`;
   const btnOp = `${btnBase} bg-brand-500 text-black hover:bg-brand-400 shadow-brand-500/10`;
   const btnClear = `${btnBase} bg-accent-500/20 text-accent-500 hover:bg-accent-500/30`;
@@ -147,7 +161,7 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
         <button 
           onClick={addToCart}
           disabled={parseFloat(display) === 0}
-          className="w-full h-14 bg-dark-800 border border-brand-500/30 rounded-2xl flex items-center justify-center gap-3 text-brand-500 font-black uppercase tracking-wider hover:bg-brand-500 hover:text-black transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full h-14 bg-dark-800 border border-brand-500/30 rounded-2xl flex items-center justify-center gap-3 text-brand-500 font-black uppercase tracking-wider hover:bg-brand-500 hover:text-black transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
         >
           <Plus size={20} strokeWidth={3} />
           Lançar R$ {parseFloat(display).toFixed(2)}

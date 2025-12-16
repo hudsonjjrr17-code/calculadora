@@ -39,6 +39,33 @@ const App: React.FC = () => {
     localStorage.setItem('shopping_history', JSON.stringify(history));
   }, [history]);
 
+  // Handle Android Back Button Logic
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // If modal is open, close it
+      if (appState === AppState.CONFIRMING) {
+        setPendingScan(null);
+        setAppState(AppState.IDLE);
+      } 
+      // If items exist, ask before leaving context if back is pressed? 
+      // Simplified: If not on Calculator tab, go back to Calculator
+      else if (activeTab !== ActiveTab.CALCULATOR) {
+        setActiveTab(ActiveTab.CALCULATOR);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    // Push state when opening modal or changing tabs to trap back button
+    if (appState === AppState.CONFIRMING || activeTab !== ActiveTab.CALCULATOR) {
+      window.history.pushState({ view: 'modal_or_tab' }, '');
+    }
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [appState, activeTab]);
+
   // PWA Install Prompt Listener
   useEffect(() => {
     const handler = (e: any) => {
@@ -60,6 +87,15 @@ const App: React.FC = () => {
     setDeferredPrompt(null);
   };
 
+  const triggerHaptic = () => {
+    if (navigator.vibrate) navigator.vibrate(10);
+  };
+
+  const handleTabChange = (tab: ActiveTab) => {
+    triggerHaptic();
+    setActiveTab(tab);
+  };
+
   // Calculate Grand Total
   const totalAmount = useMemo(() => {
     return items.reduce((sum, item) => sum + item.totalPrice, 0);
@@ -67,6 +103,7 @@ const App: React.FC = () => {
 
   const handleCapture = async (base64Image: string) => {
     setAppState(AppState.PROCESSING);
+    triggerHaptic();
     
     try {
       const result = await analyzePriceTag(base64Image);
@@ -89,6 +126,7 @@ const App: React.FC = () => {
         guessedName: ''
       });
     } finally {
+      if (navigator.vibrate) navigator.vibrate([10, 50, 10]); // Success pattern
       setAppState(AppState.CONFIRMING);
     }
   };
@@ -102,14 +140,17 @@ const App: React.FC = () => {
     setItems((prev) => [newItem, ...prev]);
     setPendingScan(null);
     setAppState(AppState.IDLE);
+    if (navigator.vibrate) navigator.vibrate(20);
   };
 
   const handleRemoveItem = (id: string) => {
+    if (navigator.vibrate) navigator.vibrate(15);
     setItems((prev) => prev.filter(item => item.id !== id));
   };
 
   const handleFinalize = () => {
     if (items.length === 0) return;
+    if (navigator.vibrate) navigator.vibrate(20);
     if (!window.confirm("Finalizar esta compra e salvar no histórico?")) return;
 
     const session: ShoppingSession = {
@@ -146,7 +187,7 @@ const App: React.FC = () => {
              {activeTab === ActiveTab.CALCULATOR && 'CALCULADORA'}
              {activeTab === ActiveTab.HISTORY && 'HISTÓRICO'}
            </h1>
-           <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">AI Powered System</p>
+           <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">SUPERMARKET CALCULADORA</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -191,7 +232,7 @@ const App: React.FC = () => {
                  <Smartphone size={24} className="text-black" />
                </div>
                <div className="flex-1">
-                 <h3 className="font-black text-sm uppercase leading-tight">Instalar Aplicativo</h3>
+                 <h3 className="font-black text-sm uppercase leading-tight">Instalar Supermarket</h3>
                  <p className="text-[10px] font-bold opacity-75 leading-tight mt-0.5">Acesso rápido e funcionamento offline</p>
                </div>
              </div>
@@ -264,7 +305,7 @@ const App: React.FC = () => {
 
       {/* Bottom Floating Total (Only for Scanner and Calc) */}
       {(activeTab === ActiveTab.SCANNER || activeTab === ActiveTab.CALCULATOR) && (
-        <div className="absolute bottom-[5.5rem] left-4 right-4 z-20 pointer-events-none">
+        <div className="absolute bottom-[6.5rem] left-4 right-4 z-20 pointer-events-none">
           <div className="bg-dark-900/90 backdrop-blur-md border border-dark-800 rounded-xl p-4 shadow-2xl shadow-black flex justify-between items-center pointer-events-auto">
             <div>
               <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Total Estimado</p>
@@ -291,12 +332,12 @@ const App: React.FC = () => {
       )}
 
       {/* Bottom Navigation */}
-      <nav className="shrink-0 bg-dark-950/95 backdrop-blur-xl border-t border-dark-800 pb-safe-bottom pt-2 px-6 z-30 h-[80px]">
-        <ul className="flex justify-between items-center max-w-xs mx-auto h-full pb-2">
+      <nav className="shrink-0 bg-dark-950/95 backdrop-blur-xl border-t border-dark-800 pb-safe-bottom pt-2 px-6 z-30 h-[90px]">
+        <ul className="flex justify-between items-center max-w-xs mx-auto h-full pb-4">
           <li>
             <button 
-              onClick={() => setActiveTab(ActiveTab.SCANNER)}
-              className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200 ${activeTab === ActiveTab.SCANNER ? 'text-brand-400' : 'text-gray-600 hover:text-gray-400'}`}
+              onClick={() => handleTabChange(ActiveTab.SCANNER)}
+              className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200 touch-manipulation ${activeTab === ActiveTab.SCANNER ? 'text-brand-400' : 'text-gray-600 hover:text-gray-400'}`}
             >
               <Scan size={24} strokeWidth={activeTab === ActiveTab.SCANNER ? 3 : 2} />
               <span className="text-[9px] font-black uppercase tracking-wider">Scanner</span>
@@ -304,8 +345,8 @@ const App: React.FC = () => {
           </li>
           <li>
             <button 
-              onClick={() => setActiveTab(ActiveTab.CALCULATOR)}
-              className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200 ${activeTab === ActiveTab.CALCULATOR ? 'text-brand-400' : 'text-gray-600 hover:text-gray-400'}`}
+              onClick={() => handleTabChange(ActiveTab.CALCULATOR)}
+              className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200 touch-manipulation ${activeTab === ActiveTab.CALCULATOR ? 'text-brand-400' : 'text-gray-600 hover:text-gray-400'}`}
             >
               <Calculator size={24} strokeWidth={activeTab === ActiveTab.CALCULATOR ? 3 : 2} />
               <span className="text-[9px] font-black uppercase tracking-wider">Calc</span>
@@ -313,8 +354,8 @@ const App: React.FC = () => {
           </li>
           <li>
             <button 
-              onClick={() => setActiveTab(ActiveTab.HISTORY)}
-              className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200 ${activeTab === ActiveTab.HISTORY ? 'text-brand-400' : 'text-gray-600 hover:text-gray-400'}`}
+              onClick={() => handleTabChange(ActiveTab.HISTORY)}
+              className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200 touch-manipulation ${activeTab === ActiveTab.HISTORY ? 'text-brand-400' : 'text-gray-600 hover:text-gray-400'}`}
             >
               <HistoryIcon size={24} strokeWidth={activeTab === ActiveTab.HISTORY ? 3 : 2} />
               <span className="text-[9px] font-black uppercase tracking-wider">Histórico</span>

@@ -1,0 +1,7 @@
+{
+  "name": "Supermarket Calculadora",
+  "description": "Calculadora de compras inteligente que lê preços usando a câmera e gerencia seu carrinho.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

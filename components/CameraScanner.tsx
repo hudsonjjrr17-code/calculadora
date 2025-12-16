@@ -2,6 +2,13 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Camera, AlertTriangle, Zap, ZapOff, Maximize2, Lock, WifiOff } from 'lucide-react';
 import { AppState } from '../types';
 
+// Add BarcodeDetector type if not present in global scope for TS
+declare global {
+  interface Window {
+    BarcodeDetector: any;
+  }
+}
+
 interface CameraScannerProps {
   onCapture: (base64Image: string) => void;
   isProcessing: boolean;
@@ -20,11 +27,23 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [flashActive, setFlashActive] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isTargetDetected, setIsTargetDetected] = useState(false);
+  const barcodeDetectorRef = useRef<any | null>(null);
 
-  // Haptic feedback helper
-  const triggerHaptic = () => {
-    if (navigator.vibrate) navigator.vibrate(10);
-  };
+  // Initialize Barcode Detector once
+  useEffect(() => {
+    try {
+      if ('BarcodeDetector' in window) {
+        window.BarcodeDetector.getSupportedFormats().then((supportedFormats: string[]) => {
+           barcodeDetectorRef.current = new window.BarcodeDetector({ formats: supportedFormats });
+        });
+      } else {
+        console.warn('Barcode Detector API not supported.');
+      }
+    } catch (e) {
+      console.error('Error initializing BarcodeDetector:', e);
+    }
+  }, []);
 
   const startCamera = async () => {
     if (streamRef.current) {
@@ -39,7 +58,6 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       return;
     }
 
-    // Proactively check for 'denied' permission
     try {
       if (navigator.permissions && navigator.permissions.query) {
         const permissionStatus = await navigator.permissions.query({ name: 'camera' as PermissionName });
@@ -86,7 +104,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     if (!videoRef.current || !canvasRef.current) return;
     
     setFlashActive(true);
-    setTimeout(() => setFlashActive(false), 200);
+    setTimeout(() => setFlashActive(false), 150);
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -112,24 +130,75 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     };
   }, [isOffline]);
   
-  // Automatic scanning interval
+  // Smart detection loop using requestAnimationFrame
   useEffect(() => {
-    if (!isCameraReady || isOffline || streamError) {
-      return;
-    }
+    let animationFrameId: number;
 
-    const intervalId = setInterval(() => {
-      if (appState === AppState.IDLE) {
+    const analyzeFrameForHighContrast = (ctx: CanvasRenderingContext2D, w: number, h: number): boolean => {
+      const region = { x: w * 0.2, y: h * 0.3, width: w * 0.6, height: h * 0.4 };
+      const imageData = ctx.getImageData(region.x, region.y, region.width, region.height);
+      const data = imageData.data;
+      let sum = 0, sumSq = 0;
+      const pixelCount = data.length / 4;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const grayscale = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        sum += grayscale;
+        sumSq += grayscale * grayscale;
+      }
+      
+      const mean = sum / pixelCount;
+      const stdDev = Math.sqrt(sumSq / pixelCount - mean * mean);
+      return stdDev > 40;
+    };
+
+    const detectionLoop = async () => {
+      if (appState !== AppState.IDLE || !isCameraReady || !videoRef.current?.videoWidth || !canvasRef.current) {
+        setIsTargetDetected(false);
+        animationFrameId = requestAnimationFrame(detectionLoop);
+        return;
+      }
+      
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+      
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      let detected = false;
+
+      if (barcodeDetectorRef.current) {
+        try {
+          const barcodes = await barcodeDetectorRef.current.detect(canvas);
+          if (barcodes.length > 0) detected = true;
+        } catch(e) { /* ignore */ }
+      }
+
+      if (!detected && analyzeFrameForHighContrast(ctx, canvas.width, canvas.height)) {
+        detected = true;
+      }
+
+      setIsTargetDetected(detected);
+
+      if (detected) {
         handleCapture();
       }
-    }, 2500);
 
-    return () => clearInterval(intervalId);
-  }, [appState, isOffline, streamError, isCameraReady]);
+      animationFrameId = requestAnimationFrame(detectionLoop);
+    };
+
+    animationFrameId = requestAnimationFrame(detectionLoop);
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [appState, isCameraReady, isOffline, streamError]);
+
 
   const toggleTorch = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    triggerHaptic();
+    if (navigator.vibrate) navigator.vibrate(10);
     if (streamRef.current && hasTorch) {
       const track = streamRef.current.getVideoTracks()[0];
       const newStatus = !isTorchOn;
@@ -146,43 +215,27 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     return (
       <div className="relative w-full h-full bg-dark-900 rounded-[32px] flex flex-col items-center justify-center text-center p-6 border-4 border-dark-900 shadow-2xl">
         <div className="bg-brand-500/10 p-4 rounded-full mb-4">
-          {isPermissionError ? 
-            <Lock className="text-brand-500" size={32} /> :
-            <AlertTriangle className="text-brand-500" size={32} />
-          }
+          {isPermissionError ? <Lock className="text-brand-500" size={32} /> : <AlertTriangle className="text-brand-500" size={32} />}
         </div>
         <p className="text-white font-bold uppercase tracking-widest text-sm">{streamError}</p>
-        
-        {isPermissionError ? (
-          <>
+        {isPermissionError && (
             <p className="text-gray-500 text-xs mt-2 max-w-[250px]">
-              Para escanear, precisamos de acesso à câmera. Por favor, <strong>habilite a permissão nas configurações do seu navegador</strong> (geralmente no ícone de cadeado <Lock size={10} className="inline-block -mt-1"/> na barra de endereço).
+              Para escanear, <strong>habilite a permissão da câmera nas configurações do navegador</strong> (no ícone de cadeado <Lock size={10} className="inline-block -mt-1"/> na barra de endereço).
             </p>
-            <button
-              onClick={startCamera}
-              className="mt-6 bg-brand-500 text-black font-bold text-sm px-6 py-3 rounded-full hover:bg-brand-400 transition-all active:scale-95 shadow-lg shadow-brand-500/10"
-            >
-              Tentar Novamente
-            </button>
-          </>
-        ) : (
-          <p className="text-gray-500 text-xs mt-2 max-w-[200px]">
-            Verifique as conexões ou tente recarregar a página.
-          </p>
         )}
       </div>
     );
   }
 
+  const cornerClass = `absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200 ${isTargetDetected ? 'border-green-400' : 'border-brand-400'}`;
+
   return (
-    <div 
-      className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10"
-    >
+    <div className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10">
       {isOffline && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 text-center p-4">
           <WifiOff size={40} className="text-gray-600 mb-4" />
           <h3 className="font-bold text-white uppercase tracking-wider">Modo Offline</h3>
-          <p className="text-sm text-gray-400 mt-1">O scanner de câmera requer conexão com a internet.</p>
+          <p className="text-sm text-gray-400 mt-1">O scanner de câmera requer conexão.</p>
         </div>
       )}
 
@@ -196,52 +249,40 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       />
       <canvas ref={canvasRef} className="hidden" />
       
-      <div 
-        className={`absolute inset-0 bg-white/80 pointer-events-none transition-opacity duration-200 z-50 ${flashActive ? 'opacity-100' : 'opacity-0'}`}
-      />
+      <div className={`absolute inset-0 bg-white/80 pointer-events-none transition-opacity duration-200 z-50 ${flashActive ? 'opacity-100' : 'opacity-0'}`} />
 
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute inset-0">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%] bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] rounded-3xl"></div>
-        </div>
-
+        <div className="absolute inset-0"><div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%] bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] rounded-3xl"></div></div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%]">
-          <div className="absolute -top-2 -left-2 w-10 h-10 border-t-[6px] border-l-[6px] border-brand-400 rounded-tl-xl"></div>
-          <div className="absolute -top-2 -right-2 w-10 h-10 border-t-[6px] border-r-[6px] border-brand-400 rounded-tr-xl"></div>
-          <div className="absolute -bottom-2 -left-2 w-10 h-10 border-b-[6px] border-l-[6px] border-brand-400 rounded-bl-xl"></div>
-          <div className="absolute -bottom-2 -right-2 w-10 h-10 border-b-[6px] border-r-[6px] border-brand-400 rounded-br-xl"></div>
+          <div className={`${cornerClass} -top-2 -left-2 border-t border-l rounded-tl-xl`}></div>
+          <div className={`${cornerClass} -top-2 -right-2 border-t border-r rounded-tr-xl`}></div>
+          <div className={`${cornerClass} -bottom-2 -left-2 border-b border-l rounded-bl-xl`}></div>
+          <div className={`${cornerClass} -bottom-2 -right-2 border-b border-r rounded-br-xl`}></div>
              
-          {!isProcessing && !isOffline && (
+          {!isProcessing && !isOffline && !isTargetDetected && (
             <div className="absolute left-0 right-0 h-1 bg-brand-400 rounded-full shadow-[0_0_20px_2px_rgba(250,204,21,0.6)] animate-[scan_4s_ease-in-out_infinite]"></div>
+          )}
+          {isTargetDetected && (
+             <div className="absolute left-0 right-0 h-1 bg-green-400 rounded-full shadow-[0_0_20px_2px_rgba(74,222,128,0.6)] animate-pulse"></div>
           )}
 
           <div className="absolute -bottom-12 left-0 right-0 flex justify-center">
              <div className="flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10">
-                <Maximize2 size={12} className="text-brand-400 animate-pulse" />
-                <span className="text-[10px] font-bold tracking-[0.2em] text-white/90">
-                  {isProcessing ? 'ANALISANDO...' : 'APONTE PARA A ETIQUETA'}
+                <Maximize2 size={12} className={isTargetDetected ? "text-green-400" : "text-brand-400 animate-pulse"} />
+                <span className={`text-[10px] font-bold tracking-[0.2em] transition-colors ${isTargetDetected ? "text-green-400" : "text-white/90"}`}>
+                  {isProcessing ? 'ANALISANDO...' : (isTargetDetected ? 'ALVO DETECTADO!' : 'APONTE PARA A ETIQUETA')}
                 </span>
              </div>
           </div>
         </div>
       </div>
 
-      <style>{`
-        @keyframes scan {
-          0% { transform: translateY(-10%); opacity: 0.5; }
-          50% { opacity: 1; }
-          100% { transform: translateY(110%); opacity: 0; }
-        }
-      `}</style>
+      <style>{`@keyframes scan { 0% { transform: translateY(-10%); opacity: 0.5; } 50% { opacity: 1; } 100% { transform: translateY(110%); opacity: 0; } }`}</style>
 
       {hasTorch && !isOffline && (
         <button
           onClick={toggleTorch}
-          className={`absolute top-4 right-4 z-40 p-3 rounded-full transition-all duration-300 ${
-            isTorchOn 
-            ? 'bg-brand-400 text-black shadow-[0_0_20px_rgba(250,204,21,0.5)]' 
-            : 'bg-black/30 text-white backdrop-blur-md border border-white/10 hover:bg-black/50'
-          }`}
+          className={`absolute top-4 right-4 z-40 p-3 rounded-full transition-all duration-300 ${isTorchOn ? 'bg-brand-400 text-black shadow-[0_0_20px_rgba(250,204,21,0.5)]' : 'bg-black/30 text-white backdrop-blur-md border border-white/10 hover:bg-black/50'}`}
         >
           {isTorchOn ? <Zap size={20} fill="currentColor" /> : <ZapOff size={20} />}
         </button>

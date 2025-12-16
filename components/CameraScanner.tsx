@@ -99,8 +99,9 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   };
 
   const handleCapture = () => {
+    // Stronger capture feedback
     setFlashActive(true);
-    setTimeout(() => setFlashActive(false), 150);
+    setTimeout(() => setFlashActive(false), 200); // Increased duration for better visibility
 
     if (navigator.vibrate) navigator.vibrate(50); 
     
@@ -169,34 +170,34 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
         autoPlay
         playsInline
         muted
-        className={`w-full h-full object-cover transition-opacity duration-300 ${isProcessing || isOffline ? 'opacity-50 blur-sm' : 'opacity-100'}`}
+        className={`w-full h-full object-cover transition-all duration-300 ${isProcessing || isOffline ? 'opacity-50 blur-sm' : 'opacity-100'} ${flashActive ? 'scale-110 brightness-150' : ''}`}
       />
       <canvas ref={canvasRef} className="hidden" />
       
-      {/* Shutter Flash */}
+      {/* Shutter Flash - More impactful */}
       <div 
-        className={`absolute inset-0 bg-white pointer-events-none transition-opacity duration-100 z-50 ${flashActive ? 'opacity-90' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-white/80 pointer-events-none transition-opacity duration-200 z-50 ${flashActive ? 'opacity-100' : 'opacity-0'}`}
       />
 
       {/* Modern Overlay */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Blurred Outer Mask */}
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]">
+        <div className="absolute inset-0">
           {/* Clear Center Cutout */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[75%] h-[40%] bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] rounded-2xl"></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%] bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] rounded-3xl"></div>
         </div>
 
         {/* Scanner Elements */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[75%] h-[40%]">
-          {/* Corner Brackets */}
-          <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-brand-400 rounded-tl-lg -mt-1 -ml-1"></div>
-          <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-brand-400 rounded-tr-lg -mt-1 -mr-1"></div>
-          <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-brand-400 rounded-bl-lg -mb-1 -ml-1"></div>
-          <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-brand-400 rounded-br-lg -mb-1 -mr-1"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%]">
+          {/* Corner Brackets - More prominent */}
+          <div className="absolute -top-2 -left-2 w-10 h-10 border-t-[6px] border-l-[6px] border-brand-400 rounded-tl-xl"></div>
+          <div className="absolute -top-2 -right-2 w-10 h-10 border-t-[6px] border-r-[6px] border-brand-400 rounded-tr-xl"></div>
+          <div className="absolute -bottom-2 -left-2 w-10 h-10 border-b-[6px] border-l-[6px] border-brand-400 rounded-bl-xl"></div>
+          <div className="absolute -bottom-2 -right-2 w-10 h-10 border-b-[6px] border-r-[6px] border-brand-400 rounded-br-xl"></div>
              
-          {/* Laser Scan Line */}
+          {/* Laser Scan Line - Enhanced */}
           {!isProcessing && !isOffline && (
-            <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-brand-400 to-transparent shadow-[0_0_15px_rgba(250,204,21,1)] animate-[scan_2s_cubic-bezier(0.4,0,0.6,1)_infinite]"></div>
+            <div className="absolute left-0 right-0 h-1 bg-brand-400 rounded-full shadow-[0_0_20px_2px_rgba(250,204,21,0.6)] animate-[scan_3s_ease-in-out_infinite]"></div>
           )}
 
           {/* Status Badge */}
@@ -213,10 +214,9 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
       <style>{`
         @keyframes scan {
-          0%, 100% { top: 0%; opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
-          100% { top: 100%; opacity: 0; }
+          0% { transform: translateY(-10%); opacity: 0; }
+          10%, 90% { opacity: 1; }
+          100% { transform: translateY(110%); opacity: 0; }
         }
       `}</style>
 

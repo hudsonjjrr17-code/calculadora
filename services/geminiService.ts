@@ -31,13 +31,11 @@ export const analyzePriceTag = async (base64Image: string): Promise<
             }
           },
           {
-            text: `Atue como um sistema OCR especialista em varejo. Sua tarefa é analisar a imagem e retornar um JSON estruturado seguindo estas regras:
-            1. **Transcreva TODO o texto visível na imagem**, sem exceção. Inclua nomes, números, pesos e códigos de barras.
-            2. **Identifique o NOME COMPLETO do produto** a partir do texto transcrito. Combine marca, nome, variante (sabor, tipo) e peso/volume (ex: "Leite Ninho Integral 1L"). Seja o mais detalhado e completo possível. O nome NUNCA deve ser vazio.
-            3. **Identifique o PREÇO PRINCIPAL do produto**. Procure por 'R$', cifrões, ou números em grande destaque. Retorne como um número (ex: 12.99).
-            4. **Extraia Códigos**: Se houver um código de barras numérico ou qualquer outro código de produto (SKU, etc), extraia-o como uma string.
-            
-            Se o preço não for encontrado, retorne 0 para o campo 'price'. Se o nome não for claro, use a transcrição para montar a melhor descrição possível.`
+            text: `Sua tarefa é atuar como um sistema OCR avançado. Analise a imagem e retorne um JSON.
+            1. **transcription**: Transcreva absolutamente TODO texto e número que você conseguir ver na imagem, na ordem em que aparecem. Este campo é obrigatório.
+            2. **price**: A partir da transcrição, encontre o número que mais parece ser um preço (ex: com 'R$', vírgula, ou em destaque). Retorne como um número. Se não encontrar, retorne 0.
+            3. **guessedName**: Com base no texto transcrito, monte o nome mais descritivo possível para o item. Se for um produto, inclua marca e detalhes. Se for apenas texto genérico, use as palavras mais importantes. O nome não deve ser vazio.
+            4. **productCode**: Extraia qualquer código de barras numérico ou SKU que encontrar.`
           }
         ]
       },
@@ -46,19 +44,24 @@ export const analyzePriceTag = async (base64Image: string): Promise<
         responseSchema: {
           type: Type.OBJECT,
           properties: {
+            transcription: {
+              type: Type.STRING,
+              description: "A transcrição completa de todo o texto visível na imagem."
+            },
             price: { 
               type: Type.NUMBER,
               description: "O valor numérico do preço encontrado, ou 0 se não houver."
             },
             guessedName: { 
               type: Type.STRING,
-              description: "O nome detalhado do produto com marca, tipo e peso."
+              description: "O nome detalhado do produto ou a descrição principal do texto."
             },
             productCode: {
               type: Type.STRING,
               description: "O código de barras ou SKU do produto, se encontrado."
             }
-          }
+          },
+          required: ["transcription", "price", "guessedName"]
         }
       }
     });
@@ -67,9 +70,13 @@ export const analyzePriceTag = async (base64Image: string): Promise<
     if (!text) return null;
 
     const data = JSON.parse(text);
+
+    // Use a transcrição como fallback se o nome não for identificado
+    const finalName = data.guessedName || data.transcription || "Item não identificado";
+
     return {
       price: data.price || 0,
-      guessedName: data.guessedName || "Produto Não Identificado",
+      guessedName: finalName.trim() === "" ? "Item não identificado" : finalName,
       productCode: data.productCode
     };
 

@@ -1,16 +1,21 @@
-import React from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Delete, Plus } from 'lucide-react';
 import { CartItem } from '../types';
 
 interface ManualEntryProps {
   onAddItem: (item: Omit<CartItem, 'id' | 'totalPrice'>) => void;
+  onValueChange: (value: number) => void;
 }
 
-export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
-  const [display, setDisplay] = React.useState('0');
-  const [prevValue, setPrevValue] = React.useState<number | null>(null);
-  const [operator, setOperator] = React.useState<string | null>(null);
-  const [waitingForNewValue, setWaitingForNewValue] = React.useState(false);
+export interface ManualEntryRef {
+  launch: () => void;
+}
+
+export const ManualEntry = forwardRef<ManualEntryRef, ManualEntryProps>(({ onAddItem, onValueChange }, ref) => {
+  const [display, setDisplay] = useState('0');
+  const [prevValue, setPrevValue] = useState<number | null>(null);
+  const [operator, setOperator] = useState<string | null>(null);
+  const [waitingForNewValue, setWaitingForNewValue] = useState(false);
 
   // Native Android Haptic Feedback
   const triggerHaptic = (ms: number = 10) => {
@@ -105,8 +110,15 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
     if (operator && prevValue !== null && !waitingForNewValue) {
         return calculate(prevValue, current, operator);
     }
-    return current;
+    return isNaN(current) ? 0 : current;
   };
+  
+  const valueForButton = getValueToLaunch();
+
+  useEffect(() => {
+    onValueChange(valueForButton);
+  }, [valueForButton, onValueChange]);
+
 
   const addToCart = () => {
     triggerHaptic(40); // Success vibration
@@ -121,14 +133,16 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
       clear();
     }
   };
+  
+  useImperativeHandle(ref, () => ({
+    launch: addToCart,
+  }));
 
   // Helper for button styles
   const btnBase = "h-full rounded-2xl font-bold text-2xl transition-all active:scale-95 flex items-center justify-center select-none shadow-lg touch-manipulation";
   const btnNum = `${btnBase} bg-dark-800 text-white hover:bg-dark-900 shadow-black/40`;
   const btnOp = `${btnBase} bg-brand-500 text-black hover:bg-brand-400 shadow-brand-500/10`;
   const btnClear = `${btnBase} bg-dark-800 text-brand-500 hover:bg-dark-900`;
-  
-  const valueForButton = getValueToLaunch();
 
   return (
     <div className="h-full flex flex-col">
@@ -167,18 +181,6 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
         <button onClick={() => handleNumber('0')} className={`${btnNum} col-span-2`}>0</button>
         <button onClick={handleDecimal} className={btnNum}>.</button>
       </div>
-
-      {/* Add to Cart Button */}
-      <div className="mt-2 shrink-0">
-        <button 
-          onClick={addToCart}
-          disabled={valueForButton === 0}
-          className="w-full h-14 bg-dark-800 border border-brand-500/30 rounded-2xl flex items-center justify-center gap-3 text-brand-500 font-black uppercase tracking-wider hover:bg-brand-500 hover:text-black transition-all active:scale-95 shadow-lg shadow-brand-500/10 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
-        >
-          <Plus size={20} strokeWidth={3} />
-          Lançar R$ {valueForButton.toFixed(2)}
-        </button>
-      </div>
     </div>
   );
-};
+});

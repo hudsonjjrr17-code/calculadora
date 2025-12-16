@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Scan, Calculator, History as HistoryIcon, CheckCircle, Download, ShoppingCart, X, Smartphone, WifiOff } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Scan, Calculator, History as HistoryIcon, CheckCircle, Download, ShoppingCart, X, Smartphone, WifiOff, Plus } from 'lucide-react';
 import { CameraScanner } from './components/CameraScanner';
 import { EditItemModal } from './components/EditItemModal';
 import { CartList } from './components/CartList';
-import { ManualEntry } from './components/ManualEntry';
+import { ManualEntry, ManualEntryRef } from './components/ManualEntry';
 import { HistoryList } from './components/HistoryList';
 import { AppState, CartItem, ScannedData, ActiveTab, ShoppingSession } from './types';
 import { analyzePriceTag } from './services/geminiService';
@@ -36,6 +36,10 @@ const App: React.FC = () => {
       return [];
     }
   });
+
+  // Calculator State
+  const [calculatorLaunchValue, setCalculatorLaunchValue] = useState(0);
+  const manualEntryRef = useRef<ManualEntryRef>(null);
 
   useEffect(() => {
     localStorage.setItem('shopping_history', JSON.stringify(history));
@@ -182,20 +186,24 @@ const App: React.FC = () => {
       setHistory([]);
     }
   };
+  
+  const handleLaunchFromCalc = () => {
+    manualEntryRef.current?.launch();
+  };
 
   const renderContent = () => {
     switch(activeTab) {
       case ActiveTab.SCANNER:
         return (
           <div className="flex flex-col flex-1 min-h-0 animate-fade-in">
-            <div className="px-4 pt-2">
+            <div className="px-4 pt-2 h-2/5 flex-shrink-0">
               <CameraScanner 
                 onCapture={handleCapture} 
                 isProcessing={appState === AppState.PROCESSING} 
                 isOffline={isOffline}
               />
             </div>
-            {/* Lista de itens com altura fixa e rolagem interna */}
+            {/* Lista de itens com altura flexível e rolagem interna */}
             <div className="px-4 flex-1 min-h-0 flex flex-col mt-4">
               <div className="flex items-center gap-3 mb-2 opacity-50 shrink-0">
                  <div className="h-px bg-white/20 flex-1"></div>
@@ -203,7 +211,7 @@ const App: React.FC = () => {
                  <div className="h-px bg-white/20 flex-1"></div>
               </div>
               <div className="flex-1 min-h-0 relative">
-                <div className="absolute inset-0 overflow-y-auto no-scrollbar pt-1 pb-24">
+                <div className="absolute inset-0 overflow-y-auto no-scrollbar pt-1 pb-4">
                   <CartList items={items} onRemove={handleRemoveItem} />
                 </div>
               </div>
@@ -213,7 +221,11 @@ const App: React.FC = () => {
       case ActiveTab.CALCULATOR:
         return (
           <div className="animate-fade-in h-full flex flex-col p-2">
-             <ManualEntry onAddItem={handleAddItem} />
+             <ManualEntry 
+                ref={manualEntryRef}
+                onAddItem={handleAddItem} 
+                onValueChange={setCalculatorLaunchValue}
+             />
              {items.length > 0 && (
                <div className="px-2 mt-2 pb-2 shrink-0">
                  <div className="flex items-center gap-3 mb-2 opacity-50">
@@ -246,10 +258,21 @@ const App: React.FC = () => {
       <div className="h-safe-top bg-black w-full shrink-0"></div>
 
       {/* Header */}
-      <header className="pt-6 pb-2 px-6 bg-gradient-to-b from-black to-transparent z-10 flex justify-between items-center shrink-0">
-        <h1 className="text-2xl font-black italic tracking-tighter text-white">
-          Supermarket Calculadora
-        </h1>
+      <header className="pt-4 pb-2 px-4 bg-gradient-to-b from-black to-transparent z-10 flex justify-between items-center shrink-0">
+        {activeTab === ActiveTab.CALCULATOR ? (
+            <button 
+              onClick={handleLaunchFromCalc}
+              disabled={calculatorLaunchValue === 0}
+              className="h-12 text-sm bg-dark-800 border border-brand-500/30 rounded-2xl flex items-center justify-center gap-2 text-brand-500 font-bold uppercase tracking-wider hover:bg-brand-500 hover:text-black transition-all active:scale-95 shadow-lg shadow-brand-500/10 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation px-4"
+            >
+              <Plus size={16} strokeWidth={3} />
+              Lançar R$ {calculatorLaunchValue.toFixed(2)}
+            </button>
+          ) : (
+            <h1 className="text-2xl font-black italic tracking-tighter text-white">
+              Supermarket Calculadora
+            </h1>
+        )}
         
         <div className="flex items-center gap-4">
           {isOffline && (
@@ -293,9 +316,9 @@ const App: React.FC = () => {
         {renderContent()}
       </main>
 
-      {/* Floating Total Bar (Glassmorphism) */}
+      {/* Total Bar - Now in the document flow */}
       {(activeTab === ActiveTab.SCANNER || activeTab === ActiveTab.CALCULATOR) && (
-        <div className="absolute bottom-[85px] left-4 right-4 z-20 pb-safe-bottom">
+        <div className="shrink-0 px-4 pb-2 z-10">
           <div className="bg-dark-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-[0_8px_30px_rgb(0,0,0,0.5)] flex justify-between items-center transition-all duration-300">
             <div>
               <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">Total Estimado</p>
@@ -321,12 +344,12 @@ const App: React.FC = () => {
       )}
 
       {/* Navigation */}
-      <nav className="shrink-0 bg-black/95 border-t border-white/5 pb-safe-bottom pt-2 px-2 z-30 h-[85px] relative">
-        <ul className="flex justify-around items-center h-full pb-3">
+      <nav className="shrink-0 bg-black/95 border-t border-white/5 pb-safe-bottom pt-2 px-2 z-20 h-[75px] relative">
+        <ul className="flex justify-around items-center h-full pb-2">
           <li>
             <button 
               onClick={() => handleTabChange(ActiveTab.SCANNER)}
-              className={`group flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all duration-300 ${activeTab === ActiveTab.SCANNER ? 'bg-white/10 text-brand-400' : 'text-gray-500 hover:text-white'}`}
+              className={`group flex flex-col items-center gap-1.5 p-2 rounded-2xl transition-all duration-300 ${activeTab === ActiveTab.SCANNER ? 'text-brand-400' : 'text-gray-500 hover:text-white'}`}
             >
               <Scan size={22} strokeWidth={activeTab === ActiveTab.SCANNER ? 3 : 2} className="transition-transform group-active:scale-90" />
               <span className="text-[9px] font-bold uppercase tracking-wider">Scan</span>
@@ -335,7 +358,7 @@ const App: React.FC = () => {
           <li>
             <button 
               onClick={() => handleTabChange(ActiveTab.CALCULATOR)}
-              className={`group flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all duration-300 ${activeTab === ActiveTab.CALCULATOR ? 'bg-white/10 text-brand-400' : 'text-gray-500 hover:text-white'}`}
+              className={`group flex flex-col items-center gap-1.5 p-2 rounded-2xl transition-all duration-300 ${activeTab === ActiveTab.CALCULATOR ? 'text-brand-400' : 'text-gray-500 hover:text-white'}`}
             >
               <Calculator size={22} strokeWidth={activeTab === ActiveTab.CALCULATOR ? 3 : 2} className="transition-transform group-active:scale-90" />
               <span className="text-[9px] font-bold uppercase tracking-wider">Calc</span>
@@ -344,7 +367,7 @@ const App: React.FC = () => {
           <li>
             <button 
               onClick={() => handleTabChange(ActiveTab.HISTORY)}
-              className={`group flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all duration-300 ${activeTab === ActiveTab.HISTORY ? 'bg-white/10 text-brand-400' : 'text-gray-500 hover:text-white'}`}
+              className={`group flex flex-col items-center gap-1.5 p-2 rounded-2xl transition-all duration-300 ${activeTab === ActiveTab.HISTORY ? 'text-brand-400' : 'text-gray-500 hover:text-white'}`}
             >
               <HistoryIcon size={22} strokeWidth={activeTab === ActiveTab.HISTORY ? 3 : 2} className="transition-transform group-active:scale-90" />
               <span className="text-[9px] font-bold uppercase tracking-wider">Logs</span>

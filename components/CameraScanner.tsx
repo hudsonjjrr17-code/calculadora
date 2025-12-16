@@ -141,7 +141,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
   if (streamError) {
     return (
-      <div className="relative w-full aspect-[4/5] bg-dark-900 rounded-[32px] flex flex-col items-center justify-center text-center p-6 border-4 border-dark-900 shadow-2xl">
+      <div className="relative w-full h-full bg-dark-900 rounded-[32px] flex flex-col items-center justify-center text-center p-6 border-4 border-dark-900 shadow-2xl">
         <div className="bg-brand-500/10 p-4 rounded-full mb-4">
           {isPermissionError ? 
             <Lock className="text-brand-500" size={32} /> :
@@ -172,7 +172,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   }
 
   return (
-    <div className="relative w-full aspect-[4/5] bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10">
+    <div className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10">
       
       {/* Offline Overlay */}
       {isOffline && (

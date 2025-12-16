@@ -198,18 +198,19 @@ const App: React.FC = () => {
         <div className="flex flex-col">
            <div className="flex items-center gap-2 mb-1">
              <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isOnline ? 'bg-brand-500' : 'bg-red-500'}`}></div>
-             <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Supermarket Calculadora</p>
+             <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">
+               {activeTab === ActiveTab.SCANNER && 'Scanner IA'}
+               {activeTab === ActiveTab.CALCULATOR && 'Entrada Manual'}
+               {activeTab === ActiveTab.HISTORY && 'Histórico'}
+             </p>
            </div>
            <div className="flex items-center gap-2">
-             <h1 className="text-2xl font-black italic tracking-tighter text-white">
-               {activeTab === ActiveTab.SCANNER && 'SCANNER'}
-               {activeTab === ActiveTab.CALCULATOR && 'CALCULADORA'}
-               {activeTab === ActiveTab.HISTORY && 'HISTÓRICO'}
+             <h1 className="text-xl font-black italic tracking-tighter text-white leading-none">
+               Supermarket Calculadora
              </h1>
              {!isOnline && (
                <div className="bg-red-500/20 text-red-500 px-2 py-0.5 rounded-full flex items-center gap-1 border border-red-500/30">
-                 <WifiOff size={12} />
-                 <span className="text-[9px] font-bold uppercase tracking-wider">Offline</span>
+                 <WifiOff size={10} />
                </div>
              )}
            </div>

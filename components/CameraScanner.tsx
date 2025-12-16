@@ -20,6 +20,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const frameCounterRef = useRef(0);
+  const barcodeDetectorRef = useRef<any | null>(null);
 
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isPermissionError, setIsPermissionError] = useState(false);
@@ -28,7 +30,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   const [flashActive, setFlashActive] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isTargetDetected, setIsTargetDetected] = useState(false);
-  const barcodeDetectorRef = useRef<any | null>(null);
+  const [focusIndicator, setFocusIndicator] = useState<{ x: number; y: number; visible: boolean } | null>(null);
 
   // Initialize Barcode Detector once
   useEffect(() => {
@@ -101,7 +103,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   };
   
   const handleCapture = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current || appState !== AppState.IDLE) return;
     
     setFlashActive(true);
     setTimeout(() => setFlashActive(false), 150);
@@ -116,6 +118,33 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const base64 = canvas.toDataURL('image/jpeg', 0.90);
       onCapture(base64);
+    }
+  };
+  
+  const handleFocusClick = async (e: React.MouseEvent) => {
+    if (!streamRef.current || !videoRef.current) return;
+
+    const track = streamRef.current.getVideoTracks()[0];
+    const capabilities = track.getCapabilities();
+
+    if (!(capabilities as any).pointsOfInterest) {
+      console.warn('Focus point not supported by this device.');
+      return;
+    }
+
+    const rect = videoRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    setFocusIndicator({ x: e.clientX - rect.left, y: e.clientY - rect.top, visible: true });
+    setTimeout(() => setFocusIndicator(f => f ? { ...f, visible: false } : null), 1000);
+
+    try {
+      await (track as any).applyConstraints({
+        advanced: [{ pointsOfInterest: [{ x, y }] }]
+      });
+    } catch (error) {
+      console.error('Failed to set focus point:', error);
     }
   };
 
@@ -149,10 +178,11 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       
       const mean = sum / pixelCount;
       const stdDev = Math.sqrt(sumSq / pixelCount - mean * mean);
-      return stdDev > 40;
+      return stdDev > 40; // Threshold for significant contrast (text on label)
     };
 
     const detectionLoop = async () => {
+      frameCounterRef.current++;
       if (appState !== AppState.IDLE || !isCameraReady || !videoRef.current?.videoWidth || !canvasRef.current) {
         setIsTargetDetected(false);
         animationFrameId = requestAnimationFrame(detectionLoop);
@@ -170,6 +200,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       
       let detected = false;
 
+      // Always check for barcodes as it's efficient and async
       if (barcodeDetectorRef.current) {
         try {
           const barcodes = await barcodeDetectorRef.current.detect(canvas);
@@ -177,8 +208,11 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
         } catch(e) { /* ignore */ }
       }
 
-      if (!detected && analyzeFrameForHighContrast(ctx, canvas.width, canvas.height)) {
-        detected = true;
+      // Throttle the more expensive text/contrast detection
+      if (!detected && frameCounterRef.current % 3 === 0) {
+        if (analyzeFrameForHighContrast(ctx, canvas.width, canvas.height)) {
+          detected = true;
+        }
       }
 
       setIsTargetDetected(detected);
@@ -193,7 +227,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     animationFrameId = requestAnimationFrame(detectionLoop);
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [appState, isCameraReady, isOffline, streamError]);
+  }, [appState, isCameraReady, isOffline]);
 
 
   const toggleTorch = async (e: React.MouseEvent) => {
@@ -230,7 +264,10 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   const cornerClass = `absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200 ${isTargetDetected ? 'border-green-400' : 'border-brand-400'}`;
 
   return (
-    <div className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10">
+    <div 
+      onClick={handleFocusClick}
+      className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 cursor-pointer"
+    >
       {isOffline && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 text-center p-4">
           <WifiOff size={40} className="text-gray-600 mb-4" />
@@ -250,6 +287,13 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       <canvas ref={canvasRef} className="hidden" />
       
       <div className={`absolute inset-0 bg-white/80 pointer-events-none transition-opacity duration-200 z-50 ${flashActive ? 'opacity-100' : 'opacity-0'}`} />
+      
+      {focusIndicator?.visible && (
+        <div 
+          className="absolute w-16 h-16 border-2 border-white rounded-full transition-all duration-500 z-40 animate-focus-pulse pointer-events-none"
+          style={{ left: focusIndicator.x, top: focusIndicator.y, transform: 'translate(-50%, -50%)' }}
+        />
+      )}
 
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute inset-0"><div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%] bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] rounded-3xl"></div></div>
@@ -266,23 +310,30 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
              <div className="absolute left-0 right-0 h-1 bg-green-400 rounded-full shadow-[0_0_20px_2px_rgba(74,222,128,0.6)] animate-pulse"></div>
           )}
 
-          <div className="absolute -bottom-12 left-0 right-0 flex justify-center">
+          <div className="absolute -bottom-12 left-0 right-0 flex flex-col items-center justify-center">
              <div className="flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10">
                 <Maximize2 size={12} className={isTargetDetected ? "text-green-400" : "text-brand-400 animate-pulse"} />
                 <span className={`text-[10px] font-bold tracking-[0.2em] transition-colors ${isTargetDetected ? "text-green-400" : "text-white/90"}`}>
                   {isProcessing ? 'ANALISANDO...' : (isTargetDetected ? 'ALVO DETECTADO!' : 'APONTE PARA A ETIQUETA')}
                 </span>
              </div>
+             {!isProcessing && !isTargetDetected && (
+                <p className="text-white/50 text-[10px] mt-2 font-bold">Toque na tela para focar</p>
+             )}
           </div>
         </div>
       </div>
 
-      <style>{`@keyframes scan { 0% { transform: translateY(-10%); opacity: 0.5; } 50% { opacity: 1; } 100% { transform: translateY(110%); opacity: 0; } }`}</style>
+      <style>{`
+        @keyframes scan { 0% { transform: translateY(-10%); opacity: 0.5; } 50% { opacity: 1; } 100% { transform: translateY(110%); opacity: 0; } }
+        @keyframes focus-pulse { 0% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
+        .animate-focus-pulse { animation: focus-pulse 1s ease-out; }
+      `}</style>
 
       {hasTorch && !isOffline && (
         <button
           onClick={toggleTorch}
-          className={`absolute top-4 right-4 z-40 p-3 rounded-full transition-all duration-300 ${isTorchOn ? 'bg-brand-400 text-black shadow-[0_0_20px_rgba(250,204,21,0.5)]' : 'bg-black/30 text-white backdrop-blur-md border border-white/10 hover:bg-black/50'}`}
+          className={`absolute top-4 right-4 z-40 p-3 rounded-full transition-all duration-300 pointer-events-auto ${isTorchOn ? 'bg-brand-400 text-black shadow-[0_0_20px_rgba(250,204,21,0.5)]' : 'bg-black/30 text-white backdrop-blur-md border border-white/10 hover:bg-black/50'}`}
         >
           {isTorchOn ? <Zap size={20} fill="currentColor" /> : <ZapOff size={20} />}
         </button>

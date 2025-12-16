@@ -22,9 +22,9 @@ export const analyzePriceTag = async (base64Image: string): Promise<
 
     const response = await client.models.generateContent({
       model: 'gemini-2.5-flash',
-      // Fix: The 'contents' property must be an array of Content objects.
-      // The previous implementation was passing a single object instead of an array containing the object.
-      contents: [{
+      // FIX: The 'contents' property for a single-turn request should be a single Content object, not an array.
+      // The structure `{ parts: [...] }` is the correct format for a multi-modal prompt.
+      contents: {
         parts: [
           {
             inlineData: {
@@ -40,7 +40,7 @@ export const analyzePriceTag = async (base64Image: string): Promise<
             4. **productCode**: Extraia qualquer código de barras numérico ou SKU que encontrar.`
           }
         ]
-      }],
+      },
       config: {
         responseMimeType: "application/json",
         responseSchema: {

@@ -8,6 +8,7 @@ import { HistoryList } from './components/HistoryList';
 import { Toast } from './components/Toast';
 import { AppState, CartItem, ScannedData, ActiveTab, ShoppingSession } from './types';
 import { analyzePriceTag } from './services/geminiService';
+import { analyzeImageOffline } from './services/offlineOcrService';
 
 // Safe ID generator that works in all environments (http/https)
 const generateId = () => {
@@ -119,31 +120,52 @@ const App: React.FC = () => {
   const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
 
   const handleCapture = async (base64Image: string) => {
-    if (isOffline) {
-      showToast("Função indisponível offline.", 'error');
-      return;
-    }
-    
     setAppState(AppState.PROCESSING);
     
-    try {
-      const result = await analyzePriceTag(base64Image);
-      
-      if (result && result.price > 0) {
-        setPendingScan(result);
+    let analysisResult: ScannedData | null = null;
+    let usedOfflineFallback = false;
+
+    // Tenta usar a API Gemini se estiver online
+    if (!isOffline) {
+        try {
+            analysisResult = await analyzePriceTag(base64Image);
+        } catch (error) {
+            console.error("Erro na análise com Gemini, tentando fallback offline", error);
+            showToast("Falha na nuvem, usando leitor local.", 'error');
+            analysisResult = null; // Garante que o fallback será acionado
+        }
+    }
+
+    // Se a tentativa com Gemini foi pulada (offline), falhou ou não retornou preço, tenta o OCR local
+    if (!analysisResult || analysisResult.price <= 0) {
+        if (isOffline) {
+            console.log("Modo offline: usando leitor local.");
+        } else {
+            console.log("Fallback: usando leitor local.");
+            usedOfflineFallback = true;
+        }
+
+        try {
+            analysisResult = await analyzeImageOffline(base64Image);
+            if (usedOfflineFallback && analysisResult && analysisResult.price > 0) {
+                showToast("Leitura offline bem-sucedida!", 'success');
+            }
+        } catch (offlineError) {
+            console.error("Erro no OCR offline:", offlineError);
+            analysisResult = null;
+        }
+    }
+
+    // Processa o resultado final, seja da Gemini ou do OCR local
+    if (analysisResult && analysisResult.price > 0) {
+        setPendingScan(analysisResult);
         setAppState(AppState.CONFIRMING);
-        if (navigator.vibrate) navigator.vibrate([10, 50, 10]); // Success haptic for scan
-      } else {
-        // In auto-scan mode, we don't want to show an error for every failed attempt.
-        // It will just try again. We only show errors for catastrophic failures.
-        console.log("Scan attempt failed to find a price.");
-        setAppState(AppState.IDLE);
-      }
-    } catch (error) {
-      console.error("Erro ao processar imagem", error);
-      if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
-      showToast("Erro na análise da imagem.", 'error');
-      setAppState(AppState.IDLE);
+        if (navigator.vibrate) navigator.vibrate([10, 50, 10]);
+    } else {
+        console.log("Falha ao encontrar preço na etiqueta.");
+        showToast("Não foi possível ler o preço.", 'error');
+        // O cooldown é essencial para previnir spam de capturas
+        setTimeout(() => setAppState(AppState.IDLE), 1500);
     }
   };
 

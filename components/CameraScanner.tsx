@@ -37,11 +37,13 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
+        // Fix: Cast video constraints to 'any' to allow 'focusMode', which may not be in the default TS lib definitions.
         video: {
           facingMode: 'environment',
           width: { ideal: 1920 },
           height: { ideal: 1080 },
-        },
+          focusMode: 'continuous' // Improve focus for reading text/codes
+        } as any,
         audio: false,
       });
       streamRef.current = stream;
@@ -61,6 +63,22 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setStreamError("PERMISSÃO DA CÂMERA NEGADA");
         setIsPermissionError(true);
+      } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+        // Fallback if continuous focus is not supported
+        try {
+            const fallbackStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                }
+            });
+            streamRef.current = fallbackStream;
+            if (videoRef.current) videoRef.current.srcObject = fallbackStream;
+        } catch (fallbackErr) {
+             setStreamError("ERRO AO INICIAR CÂMERA");
+             setIsPermissionError(false);
+        }
       } else {
         setStreamError("ERRO AO INICIAR CÂMERA");
         setIsPermissionError(false);

@@ -2,43 +2,51 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Supermarket Calculadora</title>
     
     <!-- PWA Meta Tags -->
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#22c55e">
+    <meta name="theme-color" content="#000000">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="SuperCalc">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3737/3737151.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
             },
             colors: {
               brand: {
-                50: '#f0fdf4',
-                100: '#dcfce7',
-                400: '#4ade80',
-                500: '#22c55e',
-                600: '#16a34a',
-                900: '#14532d',
+                50: '#fefce8',
+                100: '#fef9c3',
+                300: '#fde047',
+                400: '#facc15', // Amarelo Vivo
+                500: '#eab308', // Amarelo Padrão
+                600: '#ca8a04', // Amarelo Escuro
+              },
+              accent: {
+                400: '#f87171',
+                500: '#ef4444', // Vermelho
+                600: '#dc2626',
               },
               dark: {
-                800: '#1e1e2e',
-                900: '#11111b',
+                800: '#18181b', // Cinza Chumbo
+                900: '#09090b', // Quase Preto
+                950: '#000000', // Preto Puro
               }
             },
             animation: {
               'fade-in': 'fadeIn 0.3s ease-out',
-              'slide-up': 'slideUp 0.3s ease-out',
+              'slide-up': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             },
             keyframes: {
               fadeIn: {
@@ -46,7 +54,7 @@
                 '100%': { opacity: '1' },
               },
               slideUp: {
-                '0%': { transform: 'translateY(20px)', opacity: '0' },
+                '0%': { transform: 'translateY(100%)', opacity: '0' },
                 '100%': { transform: 'translateY(0)', opacity: '1' },
               }
             }
@@ -56,11 +64,26 @@
     </script>
     <style>
       body {
-        overscroll-behavior-y: contain;
+        overscroll-behavior-y: contain; /* Prevent pull-to-refresh */
         font-family: 'Inter', sans-serif;
+        -webkit-tap-highlight-color: transparent; /* Remove gray tap highlight */
+        background-color: #000000;
       }
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      
+      /* Disable text selection for app-like feel */
+      .app-select-none {
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      
+      /* Glass effect fix */
+      .glass {
+        background: rgba(24, 24, 27, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
     </style>
   <script type="importmap">
 {
@@ -70,6 +93,7 @@
     "react-dom": "https://esm.sh/react-dom@18.3.1?deps=react@18.3.1",
     "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1",
     "lucide-react": "https://esm.sh/lucide-react@0.344.0?deps=react@18.3.1",
+    "@google/genai": "https://esm.sh/@google/genai@0.1.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "vite": "https://esm.sh/vite@^7.3.0",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
@@ -79,7 +103,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-dark-900 text-white h-screen overflow-hidden">
+  <body class="bg-dark-950 text-white fixed inset-0 overflow-hidden">
     <div id="root" class="h-full w-full"></div>
     
     <!-- Vite Entry Point -->
@@ -90,8 +114,8 @@
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
-            .then(registration => console.log('SW registered:', registration.scope))
-            .catch(err => console.log('SW registration failed:', err));
+            .then(registration => console.log('SW registered'))
+            .catch(err => console.log('SW failed', err));
         });
       }
     </script>

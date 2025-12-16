@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera } from 'lucide-react';
+import { Camera, AlertTriangle } from 'lucide-react';
 
 interface CameraScannerProps {
   onCapture: (base64Image: string) => void;
@@ -30,7 +30,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
         }
       } catch (err) {
         console.error("Error accessing camera:", err);
-        setStreamError("Acesso à câmera negado.");
+        setStreamError("ACESSO NEGADO");
       }
     };
 
@@ -62,62 +62,70 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
   if (streamError) {
     return (
-      <div className="w-full h-48 bg-dark-800 rounded-2xl flex flex-col items-center justify-center text-center p-4 border border-white/10">
-        <Camera className="text-gray-600 mb-2" size={32} />
-        <p className="text-red-400 text-sm">{streamError}</p>
+      <div className="w-full h-64 bg-dark-900 rounded-2xl flex flex-col items-center justify-center text-center p-4 border border-accent-500/30">
+        <AlertTriangle className="text-accent-500 mb-3" size={40} />
+        <p className="text-accent-500 font-bold uppercase tracking-widest">{streamError}</p>
+        <p className="text-gray-500 text-xs mt-2">Verifique as permissões do navegador</p>
       </div>
     );
   }
 
   return (
-    <div className="relative w-full aspect-[4/3] bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/10 ring-1 ring-black/50">
+    <div className="relative w-full aspect-[4/5] bg-black rounded-3xl overflow-hidden shadow-2xl border-2 border-dark-800">
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className="w-full h-full object-cover opacity-90"
+        className="w-full h-full object-cover opacity-80"
       />
       <canvas ref={canvasRef} className="hidden" />
       
       {/* Overlay UI */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Scanner Corners */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-32">
-          <div className="w-full h-full border-2 border-white/30 rounded-xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
-             <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-brand-400 rounded-tl-lg -mt-0.5 -ml-0.5"></div>
-             <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-brand-400 rounded-tr-lg -mt-0.5 -mr-0.5"></div>
-             <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-brand-400 rounded-bl-lg -mb-0.5 -ml-0.5"></div>
-             <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-brand-400 rounded-br-lg -mb-0.5 -mr-0.5"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-32">
+          <div className="w-full h-full border-2 border-white/10 rounded-lg relative shadow-[0_0_0_9999px_rgba(0,0,0,0.7)]">
+             <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-brand-500 -mt-1 -ml-1"></div>
+             <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-brand-500 -mt-1 -mr-1"></div>
+             <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-brand-500 -mb-1 -ml-1"></div>
+             <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-brand-500 -mb-1 -mr-1"></div>
              
              {/* Scanning Line Animation */}
              {!isProcessing && (
-                <div className="absolute top-0 left-0 w-full h-0.5 bg-brand-500 shadow-[0_0_10px_rgba(34,197,94,0.8)] animate-[scan_2s_infinite]"></div>
+                <div className="absolute top-0 left-0 w-full h-0.5 bg-brand-500 shadow-[0_0_15px_rgba(234,179,8,1)] animate-[scan_1.5s_infinite]"></div>
              )}
+          </div>
+          <div className="absolute -bottom-8 left-0 right-0 text-center">
+            <span className="text-[10px] font-mono text-brand-500 bg-black/50 px-2 py-1 rounded">ALVO: PREÇO</span>
           </div>
         </div>
       </div>
 
       <style>{`
         @keyframes scan {
-          0% { top: 10%; opacity: 0; }
+          0% { top: 0%; opacity: 0; }
           10% { opacity: 1; }
           90% { opacity: 1; }
-          100% { top: 90%; opacity: 0; }
+          100% { top: 100%; opacity: 0; }
         }
       `}</style>
 
       {/* Capture Button */}
-      <div className="absolute bottom-4 left-0 right-0 flex justify-center pointer-events-auto">
+      <div className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-auto">
         <button
           onClick={handleCapture}
           disabled={isProcessing}
-          className={`w-16 h-16 rounded-full border-[3px] border-white flex items-center justify-center transition-all duration-300 ${
-            isProcessing ? 'bg-gray-500 scale-90 opacity-50 cursor-not-allowed' : 'bg-transparent hover:bg-white/20 active:scale-95'
+          className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 ${
+            isProcessing 
+              ? 'bg-dark-800 scale-95 border-4 border-dark-600 cursor-not-allowed' 
+              : 'bg-transparent border-4 border-brand-500 hover:bg-brand-500/10 active:scale-90'
           }`}
           aria-label="Scan Price"
         >
-          <div className={`w-12 h-12 rounded-full ${isProcessing ? 'bg-gray-300' : 'bg-brand-500'}`}></div>
+          <div className={`w-14 h-14 rounded-full transition-all ${
+            isProcessing ? 'bg-gray-500 animate-pulse' : 'bg-brand-500'
+          }`}></div>
         </button>
       </div>
     </div>

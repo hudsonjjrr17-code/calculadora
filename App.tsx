@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Scan, Calculator, History as HistoryIcon, CheckCircle, Download, ShoppingCart, X, Smartphone } from 'lucide-react';
+import { Scan, Calculator, History as HistoryIcon, CheckCircle, Download, ShoppingCart, X, Smartphone, Sparkles, WifiOff } from 'lucide-react';
 import { CameraScanner } from './components/CameraScanner';
 import { EditItemModal } from './components/EditItemModal';
 import { CartList } from './components/CartList';
@@ -14,11 +14,11 @@ const generateId = () => {
 };
 
 const App: React.FC = () => {
-  // Default to SCANNER to match user request "identifies prices by pointing camera"
   const [activeTab, setActiveTab] = useState<ActiveTab>(ActiveTab.SCANNER);
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [items, setItems] = useState<CartItem[]>([]);
   const [pendingScan, setPendingScan] = useState<ScannedData | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -39,27 +39,35 @@ const App: React.FC = () => {
     localStorage.setItem('shopping_history', JSON.stringify(history));
   }, [history]);
 
+  // Network Status Listeners
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // Handle Android Back Button Logic
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      // If modal is open, close it
       if (appState === AppState.CONFIRMING) {
         setPendingScan(null);
         setAppState(AppState.IDLE);
       } 
-      // If on calculator or history, go back to Scanner (Main Tab)
       else if (activeTab !== ActiveTab.SCANNER) {
         setActiveTab(ActiveTab.SCANNER);
       }
     };
-
     window.addEventListener('popstate', handlePopState);
-
-    // Push state when opening modal or changing tabs to trap back button
     if (appState === AppState.CONFIRMING || activeTab !== ActiveTab.SCANNER) {
       window.history.pushState({ view: 'modal_or_tab' }, '');
     }
-
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
@@ -95,7 +103,6 @@ const App: React.FC = () => {
     setActiveTab(tab);
   };
 
-  // Calculate Grand Total
   const totalAmount = useMemo(() => {
     return items.reduce((sum, item) => sum + item.totalPrice, 0);
   }, [items]);
@@ -118,15 +125,24 @@ const App: React.FC = () => {
           guessedName: ''
         });
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error.message === "OFFLINE_MODE") {
+        alert("Modo Offline: O scanner precisa de internet. Use a aba Calculadora para entrada manual.");
+        setAppState(AppState.IDLE);
+        return; // Don't proceed to confirming
+      }
+      
       console.error("Erro ao processar imagem", error);
       setPendingScan({
         price: 0,
         guessedName: ''
       });
     } finally {
-      if (navigator.vibrate) navigator.vibrate([10, 50, 10]); // Success pattern
-      setAppState(AppState.CONFIRMING);
+      // Only vibrate and show confirmation if we didn't exit early due to offline
+      if (appState === AppState.PROCESSING) {
+         if (navigator.vibrate) navigator.vibrate([10, 50, 10]); 
+         setAppState(AppState.CONFIRMING);
+      }
     }
   };
 
@@ -172,38 +188,48 @@ const App: React.FC = () => {
   };
 
   return (
-    // Use 100dvh for mobile browsers
-    <div className="h-[100dvh] flex flex-col max-w-md mx-auto relative bg-dark-950 text-white shadow-2xl overflow-hidden app-select-none border-x border-dark-800">
+    <div className="h-[100dvh] flex flex-col max-w-md mx-auto relative bg-black text-white shadow-2xl overflow-hidden app-select-none border-x border-dark-900">
       
-      {/* Status Bar Background (iOS Safe Area) */}
+      {/* iOS Status Bar Spacer */}
       <div className="h-safe-top bg-transparent w-full"></div>
 
-      {/* Dynamic Header */}
-      <header className="pt-4 pb-2 px-6 bg-transparent z-10 flex justify-between items-center shrink-0">
-        <div>
-           <h1 className="text-2xl font-black italic tracking-tighter text-brand-400">
-             {activeTab === ActiveTab.SCANNER && 'SCANNER'}
-             {activeTab === ActiveTab.CALCULATOR && 'CALCULADORA'}
-             {activeTab === ActiveTab.HISTORY && 'HISTÓRICO'}
-           </h1>
-           <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">SUPERMARKET CALCULADORA</p>
+      {/* Header */}
+      <header className="pt-6 pb-2 px-6 bg-gradient-to-b from-black to-transparent z-10 flex justify-between items-end shrink-0">
+        <div className="flex flex-col">
+           <div className="flex items-center gap-2 mb-1">
+             <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isOnline ? 'bg-brand-500' : 'bg-red-500'}`}></div>
+             <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Supermarket Calculadora</p>
+           </div>
+           <div className="flex items-center gap-2">
+             <h1 className="text-2xl font-black italic tracking-tighter text-white">
+               {activeTab === ActiveTab.SCANNER && 'SCANNER'}
+               {activeTab === ActiveTab.CALCULATOR && 'CALCULADORA'}
+               {activeTab === ActiveTab.HISTORY && 'HISTÓRICO'}
+             </h1>
+             {!isOnline && (
+               <div className="bg-red-500/20 text-red-500 px-2 py-0.5 rounded-full flex items-center gap-1 border border-red-500/30">
+                 <WifiOff size={12} />
+                 <span className="text-[9px] font-bold uppercase tracking-wider">Offline</span>
+               </div>
+             )}
+           </div>
         </div>
         
         <div className="flex items-center gap-3">
           {showInstallBtn && (
             <button
               onClick={handleInstallClick}
-              className="flex items-center gap-1 text-[10px] bg-dark-800 text-brand-500 border border-brand-500/20 px-3 py-1.5 rounded font-bold hover:bg-brand-500 hover:text-black transition-colors"
+              className="flex items-center gap-1.5 text-[10px] bg-dark-800 text-white border border-white/10 px-3 py-1.5 rounded-full font-bold hover:bg-brand-500 hover:text-black transition-all"
             >
               <Download size={12} strokeWidth={3} />
-              BAIXAR
+              APP
             </button>
           )}
 
           {items.length > 0 && activeTab !== ActiveTab.HISTORY && (
             <button 
               onClick={() => { if(window.confirm("Limpar carrinho atual?")) setItems([]) }}
-              className="text-[10px] text-gray-400 hover:text-accent-500 font-bold transition-colors uppercase tracking-wider"
+              className="text-[10px] text-gray-500 hover:text-accent-500 font-bold transition-colors uppercase tracking-wider px-2 py-1"
             >
               LIMPAR
             </button>
@@ -211,83 +237,87 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden relative no-scrollbar pb-32">
+      {/* Main Area */}
+      <main className="flex-1 overflow-y-auto overflow-x-hidden relative no-scrollbar pb-36">
         
-        {/* Prominent Install Banner (Only shows if installable and not dismissed) */}
+        {/* PWA Banner */}
         {showInstallBtn && isInstallBannerVisible && (
-          <div className="mx-4 mt-2 mb-4 bg-gradient-to-r from-brand-500 to-brand-400 rounded-xl p-4 text-black shadow-lg animate-slide-up relative overflow-hidden group">
-             <div className="absolute top-0 right-0 w-24 h-24 bg-white/20 rounded-full -mr-8 -mt-8 blur-xl group-hover:bg-white/30 transition-all"></div>
+          <div className="mx-4 mt-2 mb-6 bg-gradient-to-br from-brand-500 to-brand-600 rounded-2xl p-5 text-black shadow-lg shadow-brand-500/10 animate-slide-up relative overflow-hidden group">
+             <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full -mr-10 -mt-10 blur-2xl group-hover:bg-white/30 transition-all"></div>
              
              <button 
                onClick={() => setIsInstallBannerVisible(false)} 
-               className="absolute top-2 right-2 p-1 text-black/50 hover:text-black transition-colors z-20"
+               className="absolute top-3 right-3 p-1 text-black/40 hover:text-black transition-colors z-20"
              >
-               <X size={16} />
+               <X size={18} />
              </button>
 
-             <div className="flex items-center gap-4 relative z-10">
-               <div className="bg-black/10 p-2.5 rounded-lg">
-                 <Smartphone size={24} className="text-black" />
+             <div className="flex items-center gap-4 relative z-10 mb-3">
+               <div className="bg-black/10 p-3 rounded-xl backdrop-blur-sm">
+                 <Smartphone size={24} className="text-black" strokeWidth={2.5} />
                </div>
                <div className="flex-1">
-                 <h3 className="font-black text-sm uppercase leading-tight">Instalar Supermarket</h3>
-                 <p className="text-[10px] font-bold opacity-75 leading-tight mt-0.5">Acesso rápido e funcionamento offline</p>
+                 <h3 className="font-black text-base uppercase leading-none">Instalar App</h3>
+                 <p className="text-xs font-medium opacity-80 mt-1">Uso offline e performance nativa</p>
                </div>
              </div>
              
              <button 
                onClick={handleInstallClick} 
-               className="w-full mt-3 bg-black text-brand-500 py-2 rounded-lg font-black text-xs uppercase tracking-wider shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+               className="w-full bg-black text-brand-500 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2"
              >
                <Download size={14} strokeWidth={3} />
-               Adicionar à Tela Inicial
+               Instalar Agora
              </button>
           </div>
         )}
 
         {/* TAB: SCANNER */}
         {activeTab === ActiveTab.SCANNER && (
-          <div className="space-y-4 animate-fade-in h-full flex flex-col">
+          <div className="space-y-6 animate-fade-in flex flex-col min-h-full">
             <div className="px-4 pt-2">
               <CameraScanner 
                 onCapture={handleCapture} 
                 isProcessing={appState === AppState.PROCESSING} 
               />
-              <div className="mt-4 text-center px-4">
-                 <p className="text-gray-500 text-xs font-mono uppercase tracking-tight">
+              <div className="mt-4 flex justify-center">
+                 <p className={`text-[10px] font-mono uppercase tracking-widest border px-3 py-1 rounded-full ${
+                   isOnline 
+                   ? 'text-gray-500 border-dark-800 bg-dark-900/50' 
+                   : 'text-red-400 border-red-500/30 bg-red-900/20'
+                 }`}>
                    {appState === AppState.PROCESSING 
-                     ? "/// PROCESSANDO PREÇO ///" 
-                     : "APONTE PARA A ETIQUETA DE PREÇO"}
+                     ? "PROCESSANDO IMAGEM..." 
+                     : isOnline 
+                       ? "MIRE NO PREÇO E PRODUTO" 
+                       : "SEM INTERNET - USE A CALCULADORA"}
                  </p>
               </div>
             </div>
             
             <div className="px-4 flex-1">
-               <div className="flex items-center gap-2 mb-4 mt-2">
-                 <div className="h-px bg-dark-800 flex-1"></div>
-                 <span className="text-[10px] uppercase tracking-widest font-black text-dark-800">LISTA ATUAL</span>
-                 <div className="h-px bg-dark-800 flex-1"></div>
+               <div className="flex items-center gap-3 mb-4 opacity-50">
+                 <div className="h-px bg-white/20 flex-1"></div>
+                 <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">Lista</span>
+                 <div className="h-px bg-white/20 flex-1"></div>
                </div>
                <CartList items={items} onRemove={handleRemoveItem} />
             </div>
           </div>
         )}
 
-        {/* TAB: CALCULATOR (MANUAL) */}
+        {/* TAB: CALCULATOR */}
         {activeTab === ActiveTab.CALCULATOR && (
           <div className="animate-fade-in h-full flex flex-col">
              <ManualEntry onAddItem={handleAddItem} />
-             {/* Only show list summary in calc mode if there are items, but keep it minimal or hidden to focus on calc */}
              {items.length > 0 && (
-               <div className="px-4 mt-2 pb-4">
-                 <div className="flex items-center gap-2 mb-4 opacity-60">
-                   <div className="h-px bg-dark-800 flex-1"></div>
-                   <span className="text-[10px] uppercase tracking-widest font-black text-dark-800">ITENS ADICIONADOS ({items.length})</span>
-                   <div className="h-px bg-dark-800 flex-1"></div>
+               <div className="px-4 mt-6 pb-4">
+                 <div className="flex items-center gap-3 mb-4 opacity-50">
+                   <div className="h-px bg-white/20 flex-1"></div>
+                   <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">Itens ({items.length})</span>
+                   <div className="h-px bg-white/20 flex-1"></div>
                  </div>
-                 {/* Compact list view for calculator tab */}
-                 <div className="max-h-32 overflow-y-auto no-scrollbar">
+                 <div className="max-h-40 overflow-y-auto no-scrollbar mask-linear-fade">
                    <CartList items={items} onRemove={handleRemoveItem} />
                  </div>
               </div>
@@ -302,14 +332,14 @@ const App: React.FC = () => {
 
       </main>
 
-      {/* Bottom Floating Total (Only for Scanner and Calc) */}
+      {/* Floating Total Bar (Glassmorphism) */}
       {(activeTab === ActiveTab.SCANNER || activeTab === ActiveTab.CALCULATOR) && (
-        <div className="absolute bottom-[6.5rem] left-4 right-4 z-20 pointer-events-none">
-          <div className="bg-dark-900/90 backdrop-blur-md border border-dark-800 rounded-xl p-4 shadow-2xl shadow-black flex justify-between items-center pointer-events-auto">
+        <div className="absolute bottom-[90px] left-4 right-4 z-20">
+          <div className="bg-dark-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-[0_8px_30px_rgb(0,0,0,0.5)] flex justify-between items-center transition-all duration-300">
             <div>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Total Estimado</p>
-              <div className="text-3xl font-black text-white font-mono tracking-tighter leading-none mt-1">
-                <span className="text-brand-500 text-xl mr-1">R$</span>
+              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">Total Estimado</p>
+              <div className="text-3xl font-black text-white font-mono tracking-tighter leading-none flex items-baseline">
+                <span className="text-brand-500 text-lg mr-1.5">R$</span>
                 {totalAmount.toFixed(2)}
               </div>
             </div>
@@ -317,47 +347,47 @@ const App: React.FC = () => {
             <button 
               onClick={handleFinalize}
               disabled={items.length === 0}
-              className={`px-6 py-4 rounded-lg font-black uppercase tracking-wide flex items-center gap-2 transition-all active:scale-95 ${
+              className={`h-12 px-6 rounded-xl font-bold uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 ${
                 items.length > 0 
-                ? 'bg-brand-500 text-black hover:bg-brand-400 shadow-[0_0_20px_rgba(234,179,8,0.3)]' 
-                : 'bg-dark-800 text-gray-600 cursor-not-allowed'
+                ? 'bg-brand-500 text-black hover:bg-brand-400 shadow-[0_0_20px_rgba(234,179,8,0.25)]' 
+                : 'bg-white/5 text-gray-500 border border-white/5 cursor-not-allowed'
               }`}
             >
-              <CheckCircle size={20} strokeWidth={2.5} />
-              <span className="text-sm">Finalizar</span>
+              <span className="text-xs">Finalizar</span>
+              <CheckCircle size={18} strokeWidth={2.5} />
             </button>
           </div>
         </div>
       )}
 
-      {/* Bottom Navigation */}
-      <nav className="shrink-0 bg-dark-950/95 backdrop-blur-xl border-t border-dark-800 pb-safe-bottom pt-2 px-6 z-30 h-[90px]">
-        <ul className="flex justify-between items-center max-w-xs mx-auto h-full pb-4">
+      {/* Navigation */}
+      <nav className="shrink-0 bg-black/95 border-t border-white/5 pb-safe-bottom pt-2 px-2 z-30 h-[85px] relative">
+        <ul className="flex justify-around items-center h-full pb-3">
           <li>
             <button 
               onClick={() => handleTabChange(ActiveTab.SCANNER)}
-              className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200 touch-manipulation ${activeTab === ActiveTab.SCANNER ? 'text-brand-400' : 'text-gray-600 hover:text-gray-400'}`}
+              className={`group flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all duration-300 ${activeTab === ActiveTab.SCANNER ? 'bg-white/10 text-brand-400' : 'text-gray-500 hover:text-white'}`}
             >
-              <Scan size={24} strokeWidth={activeTab === ActiveTab.SCANNER ? 3 : 2} />
-              <span className="text-[9px] font-black uppercase tracking-wider">Scanner</span>
+              <Scan size={22} strokeWidth={activeTab === ActiveTab.SCANNER ? 3 : 2} className="transition-transform group-active:scale-90" />
+              <span className="text-[9px] font-bold uppercase tracking-wider">Scan</span>
             </button>
           </li>
           <li>
             <button 
               onClick={() => handleTabChange(ActiveTab.CALCULATOR)}
-              className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200 touch-manipulation ${activeTab === ActiveTab.CALCULATOR ? 'text-brand-400' : 'text-gray-600 hover:text-gray-400'}`}
+              className={`group flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all duration-300 ${activeTab === ActiveTab.CALCULATOR ? 'bg-white/10 text-brand-400' : 'text-gray-500 hover:text-white'}`}
             >
-              <Calculator size={24} strokeWidth={activeTab === ActiveTab.CALCULATOR ? 3 : 2} />
-              <span className="text-[9px] font-black uppercase tracking-wider">Calc</span>
+              <Calculator size={22} strokeWidth={activeTab === ActiveTab.CALCULATOR ? 3 : 2} className="transition-transform group-active:scale-90" />
+              <span className="text-[9px] font-bold uppercase tracking-wider">Calc</span>
             </button>
           </li>
           <li>
             <button 
               onClick={() => handleTabChange(ActiveTab.HISTORY)}
-              className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200 touch-manipulation ${activeTab === ActiveTab.HISTORY ? 'text-brand-400' : 'text-gray-600 hover:text-gray-400'}`}
+              className={`group flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all duration-300 ${activeTab === ActiveTab.HISTORY ? 'bg-white/10 text-brand-400' : 'text-gray-500 hover:text-white'}`}
             >
-              <HistoryIcon size={24} strokeWidth={activeTab === ActiveTab.HISTORY ? 3 : 2} />
-              <span className="text-[9px] font-black uppercase tracking-wider">Histórico</span>
+              <HistoryIcon size={22} strokeWidth={activeTab === ActiveTab.HISTORY ? 3 : 2} className="transition-transform group-active:scale-90" />
+              <span className="text-[9px] font-bold uppercase tracking-wider">Logs</span>
             </button>
           </li>
         </ul>

@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, Component } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
@@ -12,8 +12,9 @@ interface ErrorBoundaryState {
 }
 
 // Simple Error Boundary to catch runtime errors
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = {
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Fix: Explicitly define state property to resolve TypeScript errors and remove constructor
+  public state: ErrorBoundaryState = {
     hasError: false,
     error: null
   };

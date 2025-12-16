@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera, AlertTriangle, Zap, ZapOff } from 'lucide-react';
+import { Camera, AlertTriangle, Zap, ZapOff, Maximize2 } from 'lucide-react';
 
 interface CameraScannerProps {
   onCapture: (base64Image: string) => void;
@@ -24,7 +24,6 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     let currentStream: MediaStream | null = null;
 
     const startCamera = async () => {
-      // Check for secure context and mediaDevices support
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setStreamError("CÂMERA INDISPONÍVEL (Requer HTTPS)");
         return;
@@ -34,8 +33,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 1920 }, // Higher resolution for better OCR
+            height: { ideal: 1080 },
           },
           audio: false,
         });
@@ -46,9 +45,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           videoRef.current.srcObject = stream;
         }
 
-        // Check for Torch capability
         const track = stream.getVideoTracks()[0];
-        const capabilities = track.getCapabilities() as any; // Cast to any because TS might not know torch yet
+        const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
         if (capabilities.torch) {
           setHasTorch(true);
         }
@@ -92,11 +90,9 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   };
 
   const handleCapture = () => {
-    // Visual Flash Effect
     setFlashActive(true);
     setTimeout(() => setFlashActive(false), 150);
 
-    // Haptic Feedback
     if (navigator.vibrate) navigator.vibrate(50); 
     
     if (videoRef.current && canvasRef.current && !isProcessing) {
@@ -109,7 +105,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const base64 = canvas.toDataURL('image/jpeg', 0.85);
+        const base64 = canvas.toDataURL('image/jpeg', 0.90);
         onCapture(base64);
       }
     }
@@ -117,101 +113,108 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
   if (streamError) {
     return (
-      <div className="w-full h-64 bg-dark-900 rounded-2xl flex flex-col items-center justify-center text-center p-4 border border-accent-500/30">
-        <AlertTriangle className="text-accent-500 mb-3" size={40} />
-        <p className="text-accent-500 font-bold uppercase tracking-widest">{streamError}</p>
-        <p className="text-gray-500 text-xs mt-2">
-          {streamError.includes("HTTPS") 
-            ? "O navegador bloqueia a câmera em sites não seguros (HTTP)." 
-            : "Verifique as permissões do navegador."}
+      <div className="w-full h-64 bg-dark-900 rounded-3xl flex flex-col items-center justify-center text-center p-6 border border-accent-500/20 shadow-inner">
+        <div className="bg-accent-500/10 p-4 rounded-full mb-4">
+          <AlertTriangle className="text-accent-500" size={32} />
+        </div>
+        <p className="text-white font-bold uppercase tracking-widest text-sm">{streamError}</p>
+        <p className="text-gray-500 text-xs mt-2 max-w-[200px]">
+          Verifique as permissões ou tente recarregar a página.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="relative w-full aspect-[4/5] bg-black rounded-3xl overflow-hidden shadow-2xl border-2 border-dark-800 isolate">
+    <div className="relative w-full aspect-[4/5] bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10">
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className="w-full h-full object-cover opacity-90"
+        className={`w-full h-full object-cover transition-opacity duration-300 ${isProcessing ? 'opacity-50 blur-sm' : 'opacity-100'}`}
       />
       <canvas ref={canvasRef} className="hidden" />
       
-      {/* Shutter Flash Effect Overlay */}
+      {/* Shutter Flash */}
       <div 
-        className={`absolute inset-0 bg-white pointer-events-none transition-opacity duration-150 z-50 ${flashActive ? 'opacity-80' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-white pointer-events-none transition-opacity duration-100 z-50 ${flashActive ? 'opacity-90' : 'opacity-0'}`}
       />
 
-      {/* Overlay UI */}
+      {/* Modern Overlay */}
       <div className="absolute inset-0 pointer-events-none">
-        {/* Darken surrounding area (Mask) */}
-        <div className="absolute inset-0">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-40 shadow-[0_0_0_9999px_rgba(0,0,0,0.75)] rounded-2xl"></div>
+        {/* Blurred Outer Mask */}
+        <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]">
+          {/* Clear Center Cutout */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[75%] h-[40%] bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] rounded-2xl"></div>
         </div>
 
-        {/* Scanner Corners & Scan Line */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-40">
-          <div className="w-full h-full relative">
-             {/* Corners */}
-             <div className="absolute top-0 left-0 w-8 h-8 border-t-[6px] border-l-[6px] border-brand-400 rounded-tl-xl shadow-[0_0_15px_rgba(250,204,21,0.5)] -mt-1 -ml-1 transition-all duration-300"></div>
-             <div className="absolute top-0 right-0 w-8 h-8 border-t-[6px] border-r-[6px] border-brand-400 rounded-tr-xl shadow-[0_0_15px_rgba(250,204,21,0.5)] -mt-1 -mr-1 transition-all duration-300"></div>
-             <div className="absolute bottom-0 left-0 w-8 h-8 border-b-[6px] border-l-[6px] border-brand-400 rounded-bl-xl shadow-[0_0_15px_rgba(250,204,21,0.5)] -mb-1 -ml-1 transition-all duration-300"></div>
-             <div className="absolute bottom-0 right-0 w-8 h-8 border-b-[6px] border-r-[6px] border-brand-400 rounded-br-xl shadow-[0_0_15px_rgba(250,204,21,0.5)] -mb-1 -mr-1 transition-all duration-300"></div>
+        {/* Scanner Elements */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[75%] h-[40%]">
+          {/* Corner Brackets */}
+          <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-brand-400 rounded-tl-lg -mt-1 -ml-1"></div>
+          <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-brand-400 rounded-tr-lg -mt-1 -mr-1"></div>
+          <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-brand-400 rounded-bl-lg -mb-1 -ml-1"></div>
+          <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-brand-400 rounded-br-lg -mb-1 -mr-1"></div>
              
-             {/* Scanning Line Animation */}
-             {!isProcessing && (
-                <div className="absolute left-2 right-2 h-1 bg-gradient-to-r from-transparent via-brand-400 to-transparent shadow-[0_0_20px_rgba(250,204,21,0.8)] animate-[scan_2s_ease-in-out_infinite]"></div>
-             )}
-          </div>
-          
-          <div className="absolute -bottom-10 left-0 right-0 text-center">
-            <span className="text-[10px] font-black tracking-widest text-brand-400 bg-black/80 px-3 py-1.5 rounded-full border border-brand-500/20 shadow-lg backdrop-blur-sm">
-              ALVO: PREÇO
-            </span>
+          {/* Laser Scan Line */}
+          {!isProcessing && (
+            <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-brand-400 to-transparent shadow-[0_0_15px_rgba(250,204,21,1)] animate-[scan_2s_cubic-bezier(0.4,0,0.6,1)_infinite]"></div>
+          )}
+
+          {/* Status Badge */}
+          <div className="absolute -bottom-12 left-0 right-0 flex justify-center">
+             <div className="flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10">
+                <Maximize2 size={12} className="text-brand-400 animate-pulse" />
+                <span className="text-[10px] font-bold tracking-[0.2em] text-white/90">
+                  {isProcessing ? 'ANALISANDO...' : 'BUSCANDO PREÇO'}
+                </span>
+             </div>
           </div>
         </div>
       </div>
 
       <style>{`
         @keyframes scan {
-          0% { top: 5%; opacity: 0; }
-          15% { opacity: 1; }
-          85% { opacity: 1; }
-          100% { top: 95%; opacity: 0; }
+          0%, 100% { top: 0%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
         }
       `}</style>
 
-      {/* Torch Toggle - Top Right */}
+      {/* Torch Button */}
       {hasTorch && (
         <button
           onClick={toggleTorch}
-          className={`absolute top-4 right-4 z-40 w-12 h-12 rounded-full flex items-center justify-center transition-all pointer-events-auto ${
+          className={`absolute top-4 right-4 z-40 p-3 rounded-full transition-all duration-300 ${
             isTorchOn 
-            ? 'bg-brand-400 text-black shadow-[0_0_20px_rgba(250,204,21,0.6)] scale-110' 
-            : 'bg-black/40 text-white backdrop-blur-md border border-white/10 hover:bg-black/60'
+            ? 'bg-brand-400 text-black shadow-[0_0_20px_rgba(250,204,21,0.5)]' 
+            : 'bg-black/30 text-white backdrop-blur-md border border-white/10 hover:bg-black/50'
           }`}
         >
-          {isTorchOn ? <Zap size={22} fill="currentColor" strokeWidth={0} /> : <ZapOff size={22} />}
+          {isTorchOn ? <Zap size={20} fill="currentColor" /> : <ZapOff size={20} />}
         </button>
       )}
 
-      {/* Capture Button */}
+      {/* Capture Button Area */}
       <div className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-auto z-40">
         <button
           onClick={handleCapture}
           disabled={isProcessing}
-          className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 shadow-2xl ${
-            isProcessing 
-              ? 'bg-dark-800 scale-95 border-4 border-dark-600 cursor-not-allowed' 
-              : 'bg-transparent border-[6px] border-white/90 hover:bg-white/10 active:scale-90 active:border-brand-400'
-          }`}
-          aria-label="Scan Price"
+          className={`group relative flex items-center justify-center transition-all duration-300 ${isProcessing ? 'scale-95 opacity-80' : 'active:scale-90'}`}
+          aria-label="Capturar"
         >
-          <div className={`w-16 h-16 rounded-full transition-all duration-300 ${
-            isProcessing ? 'bg-gray-500 animate-pulse scale-75' : 'bg-white scale-90 active:scale-100 active:bg-brand-400'
+          {/* Outer Ring */}
+          <div className={`w-20 h-20 rounded-full border-[3px] transition-all duration-300 ${
+            isProcessing ? 'border-brand-500/30' : 'border-white/80 group-hover:border-brand-400'
+          }`}></div>
+          
+          {/* Inner Circle */}
+          <div className={`absolute w-16 h-16 rounded-full transition-all duration-300 shadow-lg ${
+            isProcessing 
+              ? 'bg-brand-500 animate-pulse-fast' 
+              : 'bg-white group-active:bg-brand-400 group-active:scale-95'
           }`}></div>
         </button>
       </div>

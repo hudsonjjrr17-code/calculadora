@@ -161,7 +161,7 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
         <button 
           onClick={addToCart}
           disabled={parseFloat(display) === 0}
-          className="w-full h-14 bg-dark-800 border border-brand-500/30 rounded-2xl flex items-center justify-center gap-3 text-brand-500 font-black uppercase tracking-wider hover:bg-brand-500 hover:text-black transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+          className="w-full h-14 bg-dark-800 border border-brand-500/30 rounded-2xl flex items-center justify-center gap-3 text-brand-500 font-black uppercase tracking-wider hover:bg-brand-500 hover:text-black transition-all active:scale-95 shadow-lg shadow-brand-500/10 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
         >
           <Plus size={20} strokeWidth={3} />
           Lançar R$ {parseFloat(display).toFixed(2)}

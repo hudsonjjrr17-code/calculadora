@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera, AlertTriangle, Zap, ZapOff, Maximize2 } from 'lucide-react';
+import { Camera, AlertTriangle, Zap, ZapOff, Maximize2, Lock } from 'lucide-react';
 
 interface CameraScannerProps {
   onCapture: (base64Image: string) => void;
@@ -9,10 +9,12 @@ interface CameraScannerProps {
 export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProcessing }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [isPermissionError, setIsPermissionError] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
-  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const [flashActive, setFlashActive] = useState(false);
 
   // Haptic feedback helper
@@ -20,53 +22,57 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     if (navigator.vibrate) navigator.vibrate(10);
   };
 
+  const startCamera = async () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+    setStreamError(null);
+    setIsPermissionError(false);
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStreamError("CÂMERA INDISPONÍVEL (Requer HTTPS)");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+      });
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+
+      const track = stream.getVideoTracks()[0];
+      const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
+      if (capabilities.torch) {
+        setHasTorch(true);
+      }
+      setStreamError(null);
+    } catch (err: any) {
+      console.error("Error accessing camera:", err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setStreamError("PERMISSÃO DA CÂMERA NEGADA");
+        setIsPermissionError(true);
+      } else {
+        setStreamError("ERRO AO INICIAR CÂMERA");
+        setIsPermissionError(false);
+      }
+    }
+  };
+
   useEffect(() => {
-    let currentStream: MediaStream | null = null;
-
-    const startCamera = async () => {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStreamError("CÂMERA INDISPONÍVEL (Requer HTTPS)");
-        return;
-      }
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 1920 }, // Higher resolution for better OCR
-            height: { ideal: 1080 },
-          },
-          audio: false,
-        });
-        currentStream = stream;
-        setMediaStream(stream);
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-
-        const track = stream.getVideoTracks()[0];
-        const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
-        if (capabilities.torch) {
-          setHasTorch(true);
-        }
-
-        setStreamError(null);
-      } catch (err: any) {
-        console.error("Error accessing camera:", err);
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          setStreamError("PERMISSÃO NEGADA");
-        } else {
-          setStreamError("ERRO NA CÂMERA");
-        }
-      }
-    };
-
     startCamera();
 
     return () => {
-      if (currentStream) {
-        currentStream.getTracks().forEach(track => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => {
           track.stop();
         });
       }
@@ -75,8 +81,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
   const toggleTorch = async () => {
     triggerHaptic();
-    if (mediaStream && hasTorch) {
-      const track = mediaStream.getVideoTracks()[0];
+    if (streamRef.current && hasTorch) {
+      const track = streamRef.current.getVideoTracks()[0];
       const newStatus = !isTorchOn;
       try {
         await track.applyConstraints({
@@ -113,14 +119,32 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
   if (streamError) {
     return (
-      <div className="w-full h-64 bg-dark-900 rounded-3xl flex flex-col items-center justify-center text-center p-6 border border-accent-500/20 shadow-inner">
+      <div className="relative w-full aspect-[4/5] bg-dark-900 rounded-[32px] flex flex-col items-center justify-center text-center p-6 border-4 border-dark-900 shadow-2xl">
         <div className="bg-accent-500/10 p-4 rounded-full mb-4">
-          <AlertTriangle className="text-accent-500" size={32} />
+          {isPermissionError ? 
+            <Lock className="text-accent-500" size={32} /> :
+            <AlertTriangle className="text-accent-500" size={32} />
+          }
         </div>
         <p className="text-white font-bold uppercase tracking-widest text-sm">{streamError}</p>
-        <p className="text-gray-500 text-xs mt-2 max-w-[200px]">
-          Verifique as permissões ou tente recarregar a página.
-        </p>
+        
+        {isPermissionError ? (
+          <>
+            <p className="text-gray-500 text-xs mt-2 max-w-[250px]">
+              Para continuar, autorize o acesso à câmera nas configurações do seu navegador.
+            </p>
+            <button
+              onClick={startCamera}
+              className="mt-6 bg-brand-500 text-black font-bold text-sm px-6 py-3 rounded-full hover:bg-brand-400 transition-all active:scale-95 shadow-lg shadow-brand-500/10"
+            >
+              Tentar Novamente
+            </button>
+          </>
+        ) : (
+          <p className="text-gray-500 text-xs mt-2 max-w-[200px]">
+            Verifique as conexões ou tente recarregar a página.
+          </p>
+        )}
       </div>
     );
   }

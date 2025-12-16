@@ -12,11 +12,6 @@ const getAiClient = () => {
 };
 
 export const analyzePriceTag = async (base64Image: string): Promise<{ price: number; guessedName: string } | null> => {
-  // Check for offline status immediately
-  if (!navigator.onLine) {
-    throw new Error("OFFLINE_MODE");
-  }
-
   try {
     const client = getAiClient();
     
@@ -74,10 +69,7 @@ export const analyzePriceTag = async (base64Image: string): Promise<{ price: num
       guessedName: data.guessedName || "Produto Identificado"
     };
 
-  } catch (error: any) {
-    // Re-throw offline error if caught during execution
-    if (error.message === "OFFLINE_MODE") throw error;
-    
+  } catch (error) {
     console.error("Gemini analysis error:", error);
     return null;
   }

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Scan, Calculator, History as HistoryIcon, CheckCircle, Download, ShoppingCart, X, Smartphone, Sparkles, WifiOff } from 'lucide-react';
+import { Scan, Calculator, History as HistoryIcon, CheckCircle, Download, ShoppingCart, X, Smartphone, Sparkles } from 'lucide-react';
 import { CameraScanner } from './components/CameraScanner';
 import { EditItemModal } from './components/EditItemModal';
 import { CartList } from './components/CartList';
@@ -18,7 +18,6 @@ const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [items, setItems] = useState<CartItem[]>([]);
   const [pendingScan, setPendingScan] = useState<ScannedData | null>(null);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -38,20 +37,6 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('shopping_history', JSON.stringify(history));
   }, [history]);
-
-  // Network Status Listeners
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
 
   // Handle Android Back Button Logic
   useEffect(() => {
@@ -125,24 +110,15 @@ const App: React.FC = () => {
           guessedName: ''
         });
       }
-    } catch (error: any) {
-      if (error.message === "OFFLINE_MODE") {
-        alert("Modo Offline: O scanner precisa de internet. Use a aba Calculadora para entrada manual.");
-        setAppState(AppState.IDLE);
-        return; // Don't proceed to confirming
-      }
-      
+    } catch (error) {
       console.error("Erro ao processar imagem", error);
       setPendingScan({
         price: 0,
         guessedName: ''
       });
     } finally {
-      // Only vibrate and show confirmation if we didn't exit early due to offline
-      if (appState === AppState.PROCESSING) {
-         if (navigator.vibrate) navigator.vibrate([10, 50, 10]); 
-         setAppState(AppState.CONFIRMING);
-      }
+      if (navigator.vibrate) navigator.vibrate([10, 50, 10]); 
+      setAppState(AppState.CONFIRMING);
     }
   };
 
@@ -197,23 +173,14 @@ const App: React.FC = () => {
       <header className="pt-6 pb-2 px-6 bg-gradient-to-b from-black to-transparent z-10 flex justify-between items-end shrink-0">
         <div className="flex flex-col">
            <div className="flex items-center gap-2 mb-1">
-             <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isOnline ? 'bg-brand-500' : 'bg-red-500'}`}></div>
-             <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">
-               {activeTab === ActiveTab.SCANNER && 'Scanner IA'}
-               {activeTab === ActiveTab.CALCULATOR && 'Entrada Manual'}
-               {activeTab === ActiveTab.HISTORY && 'Histórico'}
-             </p>
+             <div className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse"></div>
+             <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">SuperCalc AI</p>
            </div>
-           <div className="flex items-center gap-2">
-             <h1 className="text-xl font-black italic tracking-tighter text-white leading-none">
-               Supermarket Calculadora
-             </h1>
-             {!isOnline && (
-               <div className="bg-red-500/20 text-red-500 px-2 py-0.5 rounded-full flex items-center gap-1 border border-red-500/30">
-                 <WifiOff size={10} />
-               </div>
-             )}
-           </div>
+           <h1 className="text-2xl font-black italic tracking-tighter text-white">
+             {activeTab === ActiveTab.SCANNER && 'SCANNER'}
+             {activeTab === ActiveTab.CALCULATOR && 'CALCULADORA'}
+             {activeTab === ActiveTab.HISTORY && 'HISTÓRICO'}
+           </h1>
         </div>
         
         <div className="flex items-center gap-3">
@@ -282,16 +249,10 @@ const App: React.FC = () => {
                 isProcessing={appState === AppState.PROCESSING} 
               />
               <div className="mt-4 flex justify-center">
-                 <p className={`text-[10px] font-mono uppercase tracking-widest border px-3 py-1 rounded-full ${
-                   isOnline 
-                   ? 'text-gray-500 border-dark-800 bg-dark-900/50' 
-                   : 'text-red-400 border-red-500/30 bg-red-900/20'
-                 }`}>
+                 <p className="text-gray-500 text-[10px] font-mono uppercase tracking-widest border border-dark-800 px-3 py-1 rounded-full bg-dark-900/50">
                    {appState === AppState.PROCESSING 
                      ? "PROCESSANDO IMAGEM..." 
-                     : isOnline 
-                       ? "MIRE NO PREÇO E PRODUTO" 
-                       : "SEM INTERNET - USE A CALCULADORA"}
+                     : "MIRE NO PREÇO E PRODUTO"}
                  </p>
               </div>
             </div>

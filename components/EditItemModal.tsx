@@ -111,3 +111,4 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ scannedData, onCon
       </div>
     </div>
   );
+};

@@ -203,7 +203,7 @@ const App: React.FC = () => {
                  <div className="h-px bg-white/20 flex-1"></div>
               </div>
               <div className="flex-1 min-h-0 relative">
-                <div className="absolute inset-0 overflow-y-auto no-scrollbar">
+                <div className="absolute inset-0 overflow-y-auto no-scrollbar pt-1 pb-24">
                   <CartList items={items} onRemove={handleRemoveItem} />
                 </div>
               </div>

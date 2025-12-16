@@ -47,7 +47,7 @@ export const CartList: React.FC<CartListProps> = ({ items, onRemove, isCompact =
   }
 
   return (
-    <div className="flex flex-col gap-3 px-1 pb-4">
+    <div className="flex flex-col gap-3 px-1">
       {items.map((item, index) => (
         <div 
           key={item.id} 

@@ -142,10 +142,10 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   if (streamError) {
     return (
       <div className="relative w-full aspect-[4/5] bg-dark-900 rounded-[32px] flex flex-col items-center justify-center text-center p-6 border-4 border-dark-900 shadow-2xl">
-        <div className="bg-accent-500/10 p-4 rounded-full mb-4">
+        <div className="bg-brand-500/10 p-4 rounded-full mb-4">
           {isPermissionError ? 
-            <Lock className="text-accent-500" size={32} /> :
-            <AlertTriangle className="text-accent-500" size={32} />
+            <Lock className="text-brand-500" size={32} /> :
+            <AlertTriangle className="text-brand-500" size={32} />
           }
         </div>
         <p className="text-white font-bold uppercase tracking-widest text-sm">{streamError}</p>

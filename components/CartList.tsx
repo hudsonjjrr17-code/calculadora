@@ -5,23 +5,49 @@ import { Trash2, ShoppingCart, Tag } from 'lucide-react';
 interface CartListProps {
   items: CartItem[];
   onRemove: (id: string) => void;
+  isCompact?: boolean;
 }
 
-export const CartList: React.FC<CartListProps> = ({ items, onRemove }) => {
+export const CartList: React.FC<CartListProps> = ({ items, onRemove, isCompact = false }) => {
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-gray-600 animate-fade-in">
-        <div className="bg-dark-900/50 p-8 rounded-full mb-6 border border-dark-800/50 shadow-inner">
-          <ShoppingCart size={40} className="opacity-20 text-white" />
+      <div className="flex flex-col items-center justify-center py-8 text-gray-600 animate-fade-in h-full">
+        <div className="bg-dark-900/50 p-6 rounded-full mb-4 border border-dark-800/50 shadow-inner">
+          <ShoppingCart size={32} className="opacity-20 text-white" />
         </div>
         <p className="font-bold uppercase tracking-widest text-xs text-gray-500">Seu carrinho está vazio</p>
-        <p className="text-[10px] text-gray-600 mt-2">Escaneie um item para começar</p>
+        <p className="text-[10px] text-gray-600 mt-2">Adicione um item para começar</p>
       </div>
     );
   }
 
+  if (isCompact) {
+    return (
+       <div className="flex flex-col gap-2 px-1">
+        {items.map((item) => (
+          <div 
+            key={item.id} 
+            className="bg-dark-900/80 border border-dark-800 rounded-lg p-2 flex justify-between items-center"
+          >
+            <div className="flex-1 min-w-0 pr-2">
+              <h3 className="font-bold text-gray-200 text-xs truncate uppercase">
+                {item.name}
+              </h3>
+              <span className="text-gray-500 text-[10px] font-mono">
+                {item.quantity}x R$ {item.unitPrice.toFixed(2)}
+              </span>
+            </div>
+            <span className="font-bold text-white text-sm font-mono tracking-tighter">
+              R$ {item.totalPrice.toFixed(2)}
+            </span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-3 pb-36 px-1">
+    <div className="flex flex-col gap-3 px-1 pb-4">
       {items.map((item, index) => (
         <div 
           key={item.id} 
@@ -51,7 +77,7 @@ export const CartList: React.FC<CartListProps> = ({ items, onRemove }) => {
             </span>
             <button
               onClick={(e) => { e.stopPropagation(); onRemove(item.id); }}
-              className="text-gray-500 hover:text-accent-500 hover:bg-accent-500/10 p-2 -mr-2 rounded-lg transition-all"
+              className="text-gray-500 hover:text-brand-500 hover:bg-brand-500/10 p-2 -mr-2 rounded-lg transition-all"
             >
               <Trash2 size={16} strokeWidth={2} />
             </button>

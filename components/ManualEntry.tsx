@@ -1,4 +1,4 @@
-import React, 'react';
+import React from 'react';
 import { Delete, Plus } from 'lucide-react';
 import { CartItem } from '../types';
 
@@ -122,28 +122,28 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
     }
   };
 
-  // Helper for button styles - REMOVED h-16, ADDED aspect-square
-  const btnBase = "aspect-square rounded-2xl font-bold text-2xl transition-all active:scale-95 flex items-center justify-center select-none shadow-lg touch-manipulation";
+  // Helper for button styles
+  const btnBase = "h-full rounded-2xl font-bold text-2xl transition-all active:scale-95 flex items-center justify-center select-none shadow-lg touch-manipulation";
   const btnNum = `${btnBase} bg-dark-800 text-white hover:bg-dark-900 shadow-black/40`;
   const btnOp = `${btnBase} bg-brand-500 text-black hover:bg-brand-400 shadow-brand-500/10`;
-  const btnClear = `${btnBase} bg-accent-500/20 text-accent-500 hover:bg-accent-500/30`;
+  const btnClear = `${btnBase} bg-dark-800 text-brand-500 hover:bg-dark-900`;
   
   const valueForButton = getValueToLaunch();
 
   return (
-    <div className="h-full flex flex-col p-3">
+    <div className="h-full flex flex-col">
       {/* Display Screen */}
-      <div className="bg-black border border-dark-800 rounded-3xl p-6 mb-3 flex flex-col items-end justify-center shadow-inner shadow-dark-900 min-h-[120px]">
+      <div className="bg-black border border-dark-800 rounded-3xl p-4 mb-2 flex flex-col items-end justify-center shadow-inner shadow-dark-900 min-h-[90px] shrink-0">
         <div className="text-gray-500 text-sm h-6 font-mono mb-1">
           {prevValue !== null && operator ? `${prevValue} ${operator}` : ''}
         </div>
-        <div className="text-5xl font-mono font-black tracking-tighter text-white break-all">
+        <div className="text-4xl sm:text-5xl font-mono font-black tracking-tighter text-white break-all">
           {display}
         </div>
       </div>
 
-      {/* Calculator Grid */}
-      <div className="grid grid-cols-4 gap-3">
+      {/* Calculator Grid - Fills remaining space */}
+      <div className="flex-1 grid grid-cols-4 grid-rows-5 gap-2">
         <button onClick={clear} className={`${btnClear}`}>C</button>
         <button onClick={() => handleOperation('/')} className={btnOp}>÷</button>
         <button onClick={() => handleOperation('*')} className={btnOp}>×</button>
@@ -168,8 +168,8 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
         <button onClick={handleDecimal} className={btnNum}>.</button>
       </div>
 
-      {/* Add to Cart Button - Pushed to bottom with mt-auto */}
-      <div className="mt-auto pt-3">
+      {/* Add to Cart Button */}
+      <div className="mt-2 shrink-0">
         <button 
           onClick={addToCart}
           disabled={valueForButton === 0}

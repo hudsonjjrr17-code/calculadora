@@ -104,9 +104,7 @@ const App: React.FC = () => {
     setActiveTab(tab);
   };
 
-  const totalAmount = useMemo(() => {
-    return items.reduce((sum, item) => sum + item.totalPrice, 0);
-  }, [items]);
+  const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
 
   const handleCapture = async (base64Image: string) => {
     if (isOffline) {
@@ -185,11 +183,67 @@ const App: React.FC = () => {
     }
   };
 
+  const renderContent = () => {
+    switch(activeTab) {
+      case ActiveTab.SCANNER:
+        return (
+          <div className="flex flex-col flex-1 min-h-0 animate-fade-in">
+            <div className="px-4 pt-2">
+              <CameraScanner 
+                onCapture={handleCapture} 
+                isProcessing={appState === AppState.PROCESSING} 
+                isOffline={isOffline}
+              />
+            </div>
+            {/* Lista de itens com altura fixa e rolagem interna */}
+            <div className="px-4 flex-1 min-h-0 flex flex-col mt-4">
+              <div className="flex items-center gap-3 mb-2 opacity-50 shrink-0">
+                 <div className="h-px bg-white/20 flex-1"></div>
+                 <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">Lista</span>
+                 <div className="h-px bg-white/20 flex-1"></div>
+              </div>
+              <div className="flex-1 min-h-0 relative">
+                <div className="absolute inset-0 overflow-y-auto no-scrollbar">
+                  <CartList items={items} onRemove={handleRemoveItem} />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case ActiveTab.CALCULATOR:
+        return (
+          <div className="animate-fade-in h-full flex flex-col p-2">
+             <ManualEntry onAddItem={handleAddItem} />
+             {items.length > 0 && (
+               <div className="px-2 mt-2 pb-2 shrink-0">
+                 <div className="flex items-center gap-3 mb-2 opacity-50">
+                   <div className="h-px bg-white/20 flex-1"></div>
+                   <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">Últimos Itens</span>
+                   <div className="h-px bg-white/20 flex-1"></div>
+                 </div>
+                 {/* Mostra apenas os 3 itens mais recentes para economizar espaço */}
+                 <div className="max-h-24 overflow-hidden no-scrollbar relative">
+                   <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black to-transparent z-10 pointer-events-none"></div>
+                   <CartList items={items.slice(0, 3)} onRemove={handleRemoveItem} isCompact={true} />
+                 </div>
+              </div>
+             )}
+          </div>
+        );
+      case ActiveTab.HISTORY:
+        return (
+          <div className="flex-1 min-h-0 animate-fade-in">
+            <HistoryList history={history} onClearHistory={handleClearHistory} />
+          </div>
+        );
+    }
+  }
+
   return (
     <div className="h-[100dvh] flex flex-col max-w-md mx-auto relative bg-black text-white shadow-2xl overflow-hidden app-select-none border-x border-dark-900">
       
       {/* iOS Status Bar Spacer */}
-      <div className="h-safe-top bg-transparent w-full"></div>
+      <div className="h-safe-top bg-black w-full shrink-0"></div>
 
       {/* Header */}
       <header className="pt-6 pb-2 px-6 bg-gradient-to-b from-black to-transparent z-10 flex justify-between items-center shrink-0">
@@ -216,99 +270,32 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Area */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden relative no-scrollbar pb-36">
-        
-        {/* PWA Banner */}
-        {showInstallBtn && isInstallBannerVisible && (
-          <div className="mx-4 mt-2 mb-6 bg-gradient-to-br from-brand-500 to-brand-600 rounded-2xl p-5 text-black shadow-lg shadow-brand-500/10 animate-slide-up relative overflow-hidden group">
-             <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full -mr-10 -mt-10 blur-2xl group-hover:bg-white/30 transition-all"></div>
-             
-             <button 
-               onClick={() => setIsInstallBannerVisible(false)} 
-               className="absolute top-3 right-3 p-1 text-black/40 hover:text-black transition-colors z-20"
-             >
-               <X size={18} />
-             </button>
-
-             <div className="flex items-center gap-4 relative z-10 mb-3">
-               <div className="bg-black/10 p-3 rounded-xl backdrop-blur-sm">
-                 <Smartphone size={24} className="text-black" strokeWidth={2.5} />
-               </div>
-               <div className="flex-1">
-                 <h3 className="font-black text-base uppercase leading-none">Instalar App</h3>
-                 <p className="text-xs font-medium opacity-80 mt-1">Uso offline e performance nativa</p>
-               </div>
+      {/* Main Area com PWA Banner */}
+      {showInstallBtn && isInstallBannerVisible && (
+        <div className="shrink-0 mx-4 mt-2 mb-2 bg-gradient-to-br from-brand-500 to-brand-600 rounded-2xl p-5 text-black shadow-lg shadow-brand-500/10 animate-slide-up relative overflow-hidden group">
+           <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full -mr-10 -mt-10 blur-2xl group-hover:bg-white/30 transition-all"></div>
+           <button onClick={() => setIsInstallBannerVisible(false)} className="absolute top-3 right-3 p-1 text-black/40 hover:text-black transition-colors z-20"><X size={18} /></button>
+           <div className="flex items-center gap-4 relative z-10 mb-3">
+             <div className="bg-black/10 p-3 rounded-xl backdrop-blur-sm"><Smartphone size={24} className="text-black" strokeWidth={2.5} /></div>
+             <div className="flex-1">
+               <h3 className="font-black text-base uppercase leading-none">Instalar App</h3>
+               <p className="text-xs font-medium opacity-80 mt-1">Uso offline e performance nativa</p>
              </div>
-             
-             <button 
-               onClick={handleInstallClick} 
-               className="w-full bg-black text-brand-500 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-             >
-               <Download size={14} strokeWidth={3} />
-               Instalar Agora
-             </button>
-          </div>
-        )}
+           </div>
+           <button onClick={handleInstallClick} className="w-full bg-black text-brand-500 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+             <Download size={14} strokeWidth={3} /> Instalar Agora
+           </button>
+        </div>
+      )}
 
-        {/* TAB: SCANNER */}
-        {activeTab === ActiveTab.SCANNER && (
-          <div className="space-y-6 animate-fade-in flex flex-col min-h-full">
-            <div className="px-4 pt-2">
-              <CameraScanner 
-                onCapture={handleCapture} 
-                isProcessing={appState === AppState.PROCESSING} 
-                isOffline={isOffline}
-              />
-              <div className="mt-4 flex justify-center">
-                 <p className="text-gray-500 text-[10px] font-mono uppercase tracking-widest border border-dark-800 px-3 py-1 rounded-full bg-dark-900/50">
-                   {appState === AppState.PROCESSING 
-                     ? "PROCESSANDO IMAGEM..." 
-                     : "MIRE NO PREÇO E PRODUTO"}
-                 </p>
-              </div>
-            </div>
-            
-            <div className="px-4 flex-1">
-               <div className="flex items-center gap-3 mb-4 opacity-50">
-                 <div className="h-px bg-white/20 flex-1"></div>
-                 <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">Lista</span>
-                 <div className="h-px bg-white/20 flex-1"></div>
-               </div>
-               <CartList items={items} onRemove={handleRemoveItem} />
-            </div>
-          </div>
-        )}
-
-        {/* TAB: CALCULATOR */}
-        {activeTab === ActiveTab.CALCULATOR && (
-          <div className="animate-fade-in h-full flex flex-col">
-             <ManualEntry onAddItem={handleAddItem} />
-             {items.length > 0 && (
-               <div className="px-4 mt-6 pb-4">
-                 <div className="flex items-center gap-3 mb-4 opacity-50">
-                   <div className="h-px bg-white/20 flex-1"></div>
-                   <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">Itens ({items.length})</span>
-                   <div className="h-px bg-white/20 flex-1"></div>
-                 </div>
-                 <div className="max-h-40 overflow-y-auto no-scrollbar mask-linear-fade">
-                   <CartList items={items} onRemove={handleRemoveItem} />
-                 </div>
-              </div>
-             )}
-          </div>
-        )}
-
-        {/* TAB: HISTORY */}
-        {activeTab === ActiveTab.HISTORY && (
-          <HistoryList history={history} onClearHistory={handleClearHistory} />
-        )}
-
+      {/* Main Content Area - Flexível e sem rolagem externa */}
+      <main className="flex-1 flex flex-col min-h-0 relative">
+        {renderContent()}
       </main>
 
       {/* Floating Total Bar (Glassmorphism) */}
       {(activeTab === ActiveTab.SCANNER || activeTab === ActiveTab.CALCULATOR) && (
-        <div className="absolute bottom-[90px] left-4 right-4 z-20">
+        <div className="absolute bottom-[85px] left-4 right-4 z-20 pb-safe-bottom">
           <div className="bg-dark-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-[0_8px_30px_rgb(0,0,0,0.5)] flex justify-between items-center transition-all duration-300">
             <div>
               <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">Total Estimado</p>
@@ -317,7 +304,6 @@ const App: React.FC = () => {
                 {totalAmount.toFixed(2)}
               </div>
             </div>
-            
             <button 
               onClick={handleFinalize}
               disabled={items.length === 0}

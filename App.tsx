@@ -5,6 +5,7 @@ import { EditItemModal } from './components/EditItemModal';
 import { CartList } from './components/CartList';
 import { ManualEntry, ManualEntryRef } from './components/ManualEntry';
 import { HistoryList } from './components/HistoryList';
+import { Toast } from './components/Toast';
 import { AppState, CartItem, ScannedData, ActiveTab, ShoppingSession } from './types';
 import { analyzePriceTag } from './services/geminiService';
 
@@ -19,6 +20,9 @@ const App: React.FC = () => {
   const [items, setItems] = useState<CartItem[]>([]);
   const [pendingScan, setPendingScan] = useState<ScannedData | null>(null);
   
+  // Toast State
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error'; id: number } | null>(null);
+
   // Offline State
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
@@ -99,6 +103,10 @@ const App: React.FC = () => {
     setDeferredPrompt(null);
   };
 
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type, id: Date.now() });
+  };
+
   const triggerHaptic = () => {
     if (navigator.vibrate) navigator.vibrate(10);
   };
@@ -112,37 +120,29 @@ const App: React.FC = () => {
 
   const handleCapture = async (base64Image: string) => {
     if (isOffline) {
-      alert("Função indisponível offline. Conecte-se à internet para usar o scanner.");
+      showToast("Função indisponível offline.", 'error');
       return;
     }
     
     setAppState(AppState.PROCESSING);
-    triggerHaptic();
     
     try {
       const result = await analyzePriceTag(base64Image);
       
-      if (result) {
-        setPendingScan({
-          price: result.price,
-          guessedName: result.guessedName,
-          productCode: result.productCode
-        });
+      if (result && result.price > 0) {
+        setPendingScan(result);
+        setAppState(AppState.CONFIRMING);
+        if (navigator.vibrate) navigator.vibrate([10, 50, 10]); // Success haptic for scan
       } else {
-        setPendingScan({
-          price: 0,
-          guessedName: ''
-        });
+        if (navigator.vibrate) navigator.vibrate([80, 40, 80]); // Error haptic
+        showToast("Nenhum preço reconhecido.", 'error');
+        setAppState(AppState.IDLE);
       }
     } catch (error) {
       console.error("Erro ao processar imagem", error);
-      setPendingScan({
-        price: 0,
-        guessedName: ''
-      });
-    } finally {
-      if (navigator.vibrate) navigator.vibrate([10, 50, 10]); 
-      setAppState(AppState.CONFIRMING);
+      if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+      showToast("Erro na análise da imagem.", 'error');
+      setAppState(AppState.IDLE);
     }
   };
 
@@ -155,7 +155,7 @@ const App: React.FC = () => {
     setItems((prev) => [newItem, ...prev]);
     setPendingScan(null);
     setAppState(AppState.IDLE);
-    if (navigator.vibrate) navigator.vibrate(20);
+    if (navigator.vibrate) navigator.vibrate(20); // Haptic for adding item
   };
 
   const handleRemoveItem = (id: string) => {
@@ -254,6 +254,8 @@ const App: React.FC = () => {
   return (
     <div className="h-[100dvh] flex flex-col max-w-md mx-auto relative bg-black text-white shadow-2xl overflow-hidden app-select-none border-x border-dark-900">
       
+      {toast && <Toast key={toast.id} message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+
       {/* iOS Status Bar Spacer */}
       <div className="h-safe-top bg-black w-full shrink-0"></div>
 

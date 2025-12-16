@@ -100,7 +100,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     };
   }, [isOffline]);
 
-  const toggleTorch = async () => {
+  const toggleTorch = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent capture when toggling torch
     triggerHaptic();
     if (streamRef.current && hasTorch) {
       const track = streamRef.current.getVideoTracks()[0];
@@ -117,13 +118,15 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   };
 
   const handleCapture = () => {
+    if (isProcessing || isOffline) return;
+
     // Stronger capture feedback
     setFlashActive(true);
-    setTimeout(() => setFlashActive(false), 200); // Increased duration for better visibility
+    setTimeout(() => setFlashActive(false), 200);
 
     if (navigator.vibrate) navigator.vibrate(50); 
     
-    if (videoRef.current && canvasRef.current && !isProcessing) {
+    if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       
@@ -172,7 +175,10 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   }
 
   return (
-    <div className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10">
+    <div 
+      className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 cursor-pointer"
+      onClick={handleCapture}
+    >
       
       {/* Offline Overlay */}
       {isOffline && (
@@ -223,7 +229,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
              <div className="flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10">
                 <Maximize2 size={12} className="text-brand-400 animate-pulse" />
                 <span className="text-[10px] font-bold tracking-[0.2em] text-white/90">
-                  {isProcessing ? 'ANALISANDO...' : 'BUSCANDO PREÇO'}
+                  {isProcessing ? 'ANALISANDO...' : 'TOQUE PARA ESCANEAR'}
                 </span>
              </div>
           </div>
@@ -259,28 +265,6 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           {isTorchOn ? <Zap size={20} fill="currentColor" /> : <ZapOff size={20} />}
         </button>
       )}
-
-      {/* Capture Button Area */}
-      <div className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-auto z-40">
-        <button
-          onClick={handleCapture}
-          disabled={isProcessing || isOffline}
-          className={`group relative flex items-center justify-center transition-all duration-300 ${isProcessing || isOffline ? 'scale-95 opacity-50 cursor-not-allowed' : 'active:scale-90'}`}
-          aria-label="Capturar"
-        >
-          {/* Outer Ring */}
-          <div className={`w-20 h-20 rounded-full border-[3px] transition-all duration-300 ${
-            isProcessing ? 'border-brand-500/30' : 'border-white/80 group-hover:border-brand-400'
-          }`}></div>
-          
-          {/* Inner Circle */}
-          <div className={`absolute w-16 h-16 rounded-full transition-all duration-300 shadow-lg ${
-            isProcessing 
-              ? 'bg-brand-500 animate-pulse-fast' 
-              : 'bg-white group-active:bg-brand-400 group-active:scale-95'
-          }`}></div>
-        </button>
-      </div>
     </div>
   );
 };

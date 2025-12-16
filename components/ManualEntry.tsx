@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, 'react';
 import { Delete, Plus } from 'lucide-react';
 import { CartItem } from '../types';
 
@@ -7,10 +7,10 @@ interface ManualEntryProps {
 }
 
 export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
-  const [display, setDisplay] = useState('0');
-  const [prevValue, setPrevValue] = useState<number | null>(null);
-  const [operator, setOperator] = useState<string | null>(null);
-  const [waitingForNewValue, setWaitingForNewValue] = useState(false);
+  const [display, setDisplay] = React.useState('0');
+  const [prevValue, setPrevValue] = React.useState<number | null>(null);
+  const [operator, setOperator] = React.useState<string | null>(null);
+  const [waitingForNewValue, setWaitingForNewValue] = React.useState(false);
 
   // Native Android Haptic Feedback
   const triggerHaptic = (ms: number = 10) => {
@@ -20,24 +20,16 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
   };
   
   const calculate = (a: number, b: number, op: string) => {
+    // Avoid floating point issues with multiplication and division
+    const precision = 100;
     switch (op) {
-      case '+': return a + b;
-      case '-': return a - b;
-      case '*': return a * b;
-      case '/': return a / b;
+      case '+': return (a * precision + b * precision) / precision;
+      case '-': return (a * precision - b * precision) / precision;
+      case '*': return (a * b);
+      case '/': return (a / b);
       default: return b;
     }
   };
-
-  const valueToLaunch = useMemo(() => {
-    const current = parseFloat(display);
-    if (operator && prevValue !== null && !waitingForNewValue) {
-        // Only show calculated value if user is actively typing the second number
-        return calculate(prevValue, current, operator);
-    }
-    return current;
-  }, [display, operator, prevValue, waitingForNewValue]);
-
 
   const handleNumber = (num: string) => {
     triggerHaptic(8); // Light vibration for numbers
@@ -107,28 +99,41 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
     }
   };
 
+  // Helper function to determine the value to be launched
+  const getValueToLaunch = () => {
+    const current = parseFloat(display);
+    if (operator && prevValue !== null && !waitingForNewValue) {
+        return calculate(prevValue, current, operator);
+    }
+    return current;
+  };
+
   const addToCart = () => {
     triggerHaptic(40); // Success vibration
-    if (valueToLaunch > 0) {
+    const valueToAdd = getValueToLaunch();
+
+    if (valueToAdd > 0) {
       onAddItem({
         name: 'ITEM CALCULADO',
-        unitPrice: valueToLaunch,
+        unitPrice: valueToAdd,
         quantity: 1
       });
       clear();
     }
   };
 
-  // Helper for button styles
-  const btnBase = "h-16 rounded-2xl font-bold text-2xl transition-all active:scale-95 flex items-center justify-center select-none shadow-lg touch-manipulation";
+  // Helper for button styles - REMOVED h-16, ADDED aspect-square
+  const btnBase = "aspect-square rounded-2xl font-bold text-2xl transition-all active:scale-95 flex items-center justify-center select-none shadow-lg touch-manipulation";
   const btnNum = `${btnBase} bg-dark-800 text-white hover:bg-dark-900 shadow-black/40`;
   const btnOp = `${btnBase} bg-brand-500 text-black hover:bg-brand-400 shadow-brand-500/10`;
   const btnClear = `${btnBase} bg-accent-500/20 text-accent-500 hover:bg-accent-500/30`;
+  
+  const valueForButton = getValueToLaunch();
 
   return (
-    <div className="h-full flex flex-col p-4 pb-0">
+    <div className="h-full flex flex-col p-3">
       {/* Display Screen */}
-      <div className="bg-black border border-dark-800 rounded-3xl p-6 mb-4 flex flex-col items-end justify-center shadow-inner shadow-dark-900 min-h-[140px]">
+      <div className="bg-black border border-dark-800 rounded-3xl p-6 mb-3 flex flex-col items-end justify-center shadow-inner shadow-dark-900 min-h-[120px]">
         <div className="text-gray-500 text-sm h-6 font-mono mb-1">
           {prevValue !== null && operator ? `${prevValue} ${operator}` : ''}
         </div>
@@ -138,7 +143,7 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
       </div>
 
       {/* Calculator Grid */}
-      <div className="grid grid-cols-4 gap-3 flex-1">
+      <div className="grid grid-cols-4 gap-3">
         <button onClick={clear} className={`${btnClear}`}>C</button>
         <button onClick={() => handleOperation('/')} className={btnOp}>÷</button>
         <button onClick={() => handleOperation('*')} className={btnOp}>×</button>
@@ -163,15 +168,15 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
         <button onClick={handleDecimal} className={btnNum}>.</button>
       </div>
 
-      {/* Add to Cart Button */}
-      <div className="mt-4 mb-2">
+      {/* Add to Cart Button - Pushed to bottom with mt-auto */}
+      <div className="mt-auto pt-3">
         <button 
           onClick={addToCart}
-          disabled={valueToLaunch === 0}
+          disabled={valueForButton === 0}
           className="w-full h-14 bg-dark-800 border border-brand-500/30 rounded-2xl flex items-center justify-center gap-3 text-brand-500 font-black uppercase tracking-wider hover:bg-brand-500 hover:text-black transition-all active:scale-95 shadow-lg shadow-brand-500/10 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
         >
           <Plus size={20} strokeWidth={3} />
-          Lançar R$ {valueToLaunch.toFixed(2)}
+          Lançar R$ {valueForButton.toFixed(2)}
         </button>
       </div>
     </div>

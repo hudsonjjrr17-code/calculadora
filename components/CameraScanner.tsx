@@ -215,7 +215,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
              
           {/* Laser Scan Line - Enhanced */}
           {!isProcessing && !isOffline && (
-            <div className="absolute left-0 right-0 h-1 bg-brand-400 rounded-full shadow-[0_0_20px_2px_rgba(250,204,21,0.6)] animate-[scan_3s_ease-in-out_infinite]"></div>
+            <div className="absolute left-0 right-0 h-1 bg-brand-400 rounded-full shadow-[0_0_20px_2px_rgba(250,204,21,0.6)] animate-[scan_4s_ease-in-out_infinite]"></div>
           )}
 
           {/* Status Badge */}
@@ -232,9 +232,17 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
       <style>{`
         @keyframes scan {
-          0% { transform: translateY(-10%); opacity: 0; }
-          10%, 90% { opacity: 1; }
-          100% { transform: translateY(110%); opacity: 0; }
+          0% {
+            transform: translateY(-10%);
+            opacity: 0.5;
+          }
+          50% {
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(110%);
+            opacity: 0;
+          }
         }
       `}</style>
 

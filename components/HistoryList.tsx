@@ -1,6 +1,6 @@
 import React from 'react';
 import { ShoppingSession } from '../types';
-import { Calendar, ShoppingBag, Trash2, Clock } from 'lucide-react';
+import { Calendar, ShoppingBag, Trash2, Clock, CheckCircle } from 'lucide-react';
 
 interface HistoryListProps {
   history: ShoppingSession[];
@@ -20,7 +20,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onClearHistor
   return (
     <div className="p-4 pb-24 space-y-4 animate-fade-in">
       <div className="flex justify-between items-center mb-4 px-2">
-        <h2 className="text-xl font-black italic text-white uppercase tracking-tight">Registro</h2>
+        <h2 className="text-xl font-black italic text-white uppercase tracking-tight">Registro de Compras</h2>
         <button 
           onClick={onClearHistory}
           className="text-[10px] text-accent-500 hover:text-accent-400 font-bold uppercase tracking-widest flex items-center gap-1 bg-accent-500/10 px-2 py-1 rounded"
@@ -49,16 +49,10 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onClearHistor
           </div>
           
           <div className="h-8 w-8 rounded bg-brand-500 flex items-center justify-center text-black shadow-[0_0_10px_rgba(234,179,8,0.2)]">
-            <CheckCircleIcon />
+            <CheckCircle size={16} strokeWidth={3} />
           </div>
         </div>
       ))}
     </div>
   );
 };
-
-const CheckCircleIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="20 6 9 17 4 12"></polyline>
-  </svg>
-);

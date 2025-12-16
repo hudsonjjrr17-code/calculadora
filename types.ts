@@ -9,6 +9,7 @@ export interface CartItem {
 export interface ScannedData {
   price: number;
   guessedName: string;
+  productCode?: string;
 }
 
 export interface ShoppingSession {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Scan, Calculator, History as HistoryIcon, CheckCircle, Download, ShoppingCart, X, Smartphone, Sparkles } from 'lucide-react';
+import { Scan, Calculator, History as HistoryIcon, CheckCircle, Download, ShoppingCart, X, Smartphone, WifiOff } from 'lucide-react';
 import { CameraScanner } from './components/CameraScanner';
 import { EditItemModal } from './components/EditItemModal';
 import { CartList } from './components/CartList';
@@ -19,6 +19,9 @@ const App: React.FC = () => {
   const [items, setItems] = useState<CartItem[]>([]);
   const [pendingScan, setPendingScan] = useState<ScannedData | null>(null);
   
+  // Offline State
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
   // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
@@ -37,6 +40,19 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('shopping_history', JSON.stringify(history));
   }, [history]);
+
+  // Offline/Online Listeners
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
 
   // Handle Android Back Button Logic
   useEffect(() => {
@@ -93,6 +109,11 @@ const App: React.FC = () => {
   }, [items]);
 
   const handleCapture = async (base64Image: string) => {
+    if (isOffline) {
+      alert("Função indisponível offline. Conecte-se à internet para usar o scanner.");
+      return;
+    }
+    
     setAppState(AppState.PROCESSING);
     triggerHaptic();
     
@@ -102,7 +123,8 @@ const App: React.FC = () => {
       if (result) {
         setPendingScan({
           price: result.price,
-          guessedName: result.guessedName
+          guessedName: result.guessedName,
+          productCode: result.productCode
         });
       } else {
         setPendingScan({
@@ -170,20 +192,18 @@ const App: React.FC = () => {
       <div className="h-safe-top bg-transparent w-full"></div>
 
       {/* Header */}
-      <header className="pt-6 pb-2 px-6 bg-gradient-to-b from-black to-transparent z-10 flex justify-between items-end shrink-0">
-        <div className="flex flex-col">
-           <div className="flex items-center gap-2 mb-1">
-             <div className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse"></div>
-             <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">SuperCalc AI</p>
-           </div>
-           <h1 className="text-2xl font-black italic tracking-tighter text-white">
-             {activeTab === ActiveTab.SCANNER && 'SCANNER'}
-             {activeTab === ActiveTab.CALCULATOR && 'CALCULADORA'}
-             {activeTab === ActiveTab.HISTORY && 'HISTÓRICO'}
-           </h1>
-        </div>
+      <header className="pt-6 pb-2 px-6 bg-gradient-to-b from-black to-transparent z-10 flex justify-between items-center shrink-0">
+        <h1 className="text-2xl font-black italic tracking-tighter text-white">
+          Supermarket Calculadora
+        </h1>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          {isOffline && (
+            <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-bold bg-dark-900/50 px-2 py-1 rounded-full border border-dark-800">
+              <WifiOff size={12} strokeWidth={3} />
+              <span>OFFLINE</span>
+            </div>
+          )}
           {showInstallBtn && (
             <button
               onClick={handleInstallClick}
@@ -191,15 +211,6 @@ const App: React.FC = () => {
             >
               <Download size={12} strokeWidth={3} />
               APP
-            </button>
-          )}
-
-          {items.length > 0 && activeTab !== ActiveTab.HISTORY && (
-            <button 
-              onClick={() => { if(window.confirm("Limpar carrinho atual?")) setItems([]) }}
-              className="text-[10px] text-gray-500 hover:text-accent-500 font-bold transition-colors uppercase tracking-wider px-2 py-1"
-            >
-              LIMPAR
             </button>
           )}
         </div>
@@ -247,6 +258,7 @@ const App: React.FC = () => {
               <CameraScanner 
                 onCapture={handleCapture} 
                 isProcessing={appState === AppState.PROCESSING} 
+                isOffline={isOffline}
               />
               <div className="mt-4 flex justify-center">
                  <p className="text-gray-500 text-[10px] font-mono uppercase tracking-widest border border-dark-800 px-3 py-1 rounded-full bg-dark-900/50">

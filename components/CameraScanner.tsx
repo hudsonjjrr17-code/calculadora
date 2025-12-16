@@ -1,12 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera, AlertTriangle, Zap, ZapOff, Maximize2, Lock } from 'lucide-react';
+import { Camera, AlertTriangle, Zap, ZapOff, Maximize2, Lock, WifiOff } from 'lucide-react';
 
 interface CameraScannerProps {
   onCapture: (base64Image: string) => void;
   isProcessing: boolean;
+  isOffline: boolean;
 }
 
-export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProcessing }) => {
+export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProcessing, isOffline }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -68,7 +69,9 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   };
 
   useEffect(() => {
-    startCamera();
+    if (!isOffline) {
+      startCamera();
+    }
 
     return () => {
       if (streamRef.current) {
@@ -77,7 +80,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
         });
       }
     };
-  }, []);
+  }, [isOffline]);
 
   const toggleTorch = async () => {
     triggerHaptic();
@@ -151,12 +154,22 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
   return (
     <div className="relative w-full aspect-[4/5] bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10">
+      
+      {/* Offline Overlay */}
+      {isOffline && (
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 text-center p-4">
+          <WifiOff size={40} className="text-gray-600 mb-4" />
+          <h3 className="font-bold text-white uppercase tracking-wider">Modo Offline</h3>
+          <p className="text-sm text-gray-400 mt-1">O scanner de câmera requer conexão com a internet.</p>
+        </div>
+      )}
+
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className={`w-full h-full object-cover transition-opacity duration-300 ${isProcessing ? 'opacity-50 blur-sm' : 'opacity-100'}`}
+        className={`w-full h-full object-cover transition-opacity duration-300 ${isProcessing || isOffline ? 'opacity-50 blur-sm' : 'opacity-100'}`}
       />
       <canvas ref={canvasRef} className="hidden" />
       
@@ -182,7 +195,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-brand-400 rounded-br-lg -mb-1 -mr-1"></div>
              
           {/* Laser Scan Line */}
-          {!isProcessing && (
+          {!isProcessing && !isOffline && (
             <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-brand-400 to-transparent shadow-[0_0_15px_rgba(250,204,21,1)] animate-[scan_2s_cubic-bezier(0.4,0,0.6,1)_infinite]"></div>
           )}
 
@@ -208,7 +221,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       `}</style>
 
       {/* Torch Button */}
-      {hasTorch && (
+      {hasTorch && !isOffline && (
         <button
           onClick={toggleTorch}
           className={`absolute top-4 right-4 z-40 p-3 rounded-full transition-all duration-300 ${
@@ -225,8 +238,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       <div className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-auto z-40">
         <button
           onClick={handleCapture}
-          disabled={isProcessing}
-          className={`group relative flex items-center justify-center transition-all duration-300 ${isProcessing ? 'scale-95 opacity-80' : 'active:scale-90'}`}
+          disabled={isProcessing || isOffline}
+          className={`group relative flex items-center justify-center transition-all duration-300 ${isProcessing || isOffline ? 'scale-95 opacity-50 cursor-not-allowed' : 'active:scale-90'}`}
           aria-label="Capturar"
         >
           {/* Outer Ring */}

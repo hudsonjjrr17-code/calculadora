@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Scan, Calculator, History as HistoryIcon, CheckCircle, Download, ShoppingCart } from 'lucide-react';
+import { Scan, Calculator, History as HistoryIcon, CheckCircle, Download, ShoppingCart, X, Smartphone } from 'lucide-react';
 import { CameraScanner } from './components/CameraScanner';
 import { EditItemModal } from './components/EditItemModal';
 import { CartList } from './components/CartList';
@@ -23,6 +23,7 @@ const App: React.FC = () => {
   // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
+  const [isInstallBannerVisible, setIsInstallBannerVisible] = useState(true);
   
   // History State
   const [history, setHistory] = useState<ShoppingSession[]>(() => {
@@ -138,7 +139,7 @@ const App: React.FC = () => {
       <div className="h-safe-top bg-transparent w-full"></div>
 
       {/* Dynamic Header */}
-      <header className="pt-4 pb-4 px-6 bg-transparent z-10 flex justify-between items-center shrink-0">
+      <header className="pt-4 pb-2 px-6 bg-transparent z-10 flex justify-between items-center shrink-0">
         <div>
            <h1 className="text-2xl font-black italic tracking-tighter text-brand-400">
              {activeTab === ActiveTab.SCANNER && 'SCANNER'}
@@ -152,7 +153,7 @@ const App: React.FC = () => {
           {showInstallBtn && (
             <button
               onClick={handleInstallClick}
-              className="flex items-center gap-1 text-[10px] bg-brand-500 text-black px-3 py-1.5 rounded font-bold animate-pulse"
+              className="flex items-center gap-1 text-[10px] bg-dark-800 text-brand-500 border border-brand-500/20 px-3 py-1.5 rounded font-bold hover:bg-brand-500 hover:text-black transition-colors"
             >
               <Download size={12} strokeWidth={3} />
               BAIXAR
@@ -173,6 +174,38 @@ const App: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto overflow-x-hidden relative no-scrollbar pb-32">
         
+        {/* Prominent Install Banner (Only shows if installable and not dismissed) */}
+        {showInstallBtn && isInstallBannerVisible && (
+          <div className="mx-4 mt-2 mb-4 bg-gradient-to-r from-brand-500 to-brand-400 rounded-xl p-4 text-black shadow-lg animate-slide-up relative overflow-hidden group">
+             <div className="absolute top-0 right-0 w-24 h-24 bg-white/20 rounded-full -mr-8 -mt-8 blur-xl group-hover:bg-white/30 transition-all"></div>
+             
+             <button 
+               onClick={() => setIsInstallBannerVisible(false)} 
+               className="absolute top-2 right-2 p-1 text-black/50 hover:text-black transition-colors z-20"
+             >
+               <X size={16} />
+             </button>
+
+             <div className="flex items-center gap-4 relative z-10">
+               <div className="bg-black/10 p-2.5 rounded-lg">
+                 <Smartphone size={24} className="text-black" />
+               </div>
+               <div className="flex-1">
+                 <h3 className="font-black text-sm uppercase leading-tight">Instalar Aplicativo</h3>
+                 <p className="text-[10px] font-bold opacity-75 leading-tight mt-0.5">Acesso rápido e funcionamento offline</p>
+               </div>
+             </div>
+             
+             <button 
+               onClick={handleInstallClick} 
+               className="w-full mt-3 bg-black text-brand-500 py-2 rounded-lg font-black text-xs uppercase tracking-wider shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+             >
+               <Download size={14} strokeWidth={3} />
+               Adicionar à Tela Inicial
+             </button>
+          </div>
+        )}
+
         {/* TAB: SCANNER */}
         {activeTab === ActiveTab.SCANNER && (
           <div className="space-y-4 animate-fade-in h-full flex flex-col">

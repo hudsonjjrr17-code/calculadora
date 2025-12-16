@@ -1,7 +1,9 @@
 {
+  "id": "supercalc-v1",
   "name": "Supermarket Calculadora",
   "short_name": "SuperCalc",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#000000",

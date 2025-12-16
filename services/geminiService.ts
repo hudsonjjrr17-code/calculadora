@@ -1,27 +1,24 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Lazy initialization to prevent top-level crashes
+// Lazy init to avoid top-level crashes if environment is unstable
 let ai: GoogleGenAI | null = null;
 
-const getAi = () => {
+const getAiClient = () => {
   if (!ai) {
-    // Safety check: ensure process.env exists or handle gracefully
-    // This allows the app to render even if API key setup is pending
-    // @ts-ignore
-    const apiKey = typeof process !== 'undefined' && process.env ? process.env.API_KEY : '';
-    ai = new GoogleGenAI({ apiKey });
+    // Initialize strictly following guidelines
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   }
   return ai;
 };
 
 export const analyzePriceTag = async (base64Image: string): Promise<{ price: number; guessedName: string } | null> => {
   try {
-    const aiClient = getAi();
+    const client = getAiClient();
     
     // Clean the base64 string (remove the data:image/... prefix)
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
 
-    const response = await aiClient.models.generateContent({
+    const response = await client.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [

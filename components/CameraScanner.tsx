@@ -15,6 +15,12 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     let currentStream: MediaStream | null = null;
 
     const startCamera = async () => {
+      // Check for secure context and mediaDevices support
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStreamError("CÂMERA INDISPONÍVEL (Requer HTTPS)");
+        return;
+      }
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -28,9 +34,14 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
-      } catch (err) {
+        setStreamError(null);
+      } catch (err: any) {
         console.error("Error accessing camera:", err);
-        setStreamError("ACESSO NEGADO");
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          setStreamError("PERMISSÃO NEGADA");
+        } else {
+          setStreamError("ERRO NA CÂMERA");
+        }
       }
     };
 
@@ -65,7 +76,11 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       <div className="w-full h-64 bg-dark-900 rounded-2xl flex flex-col items-center justify-center text-center p-4 border border-accent-500/30">
         <AlertTriangle className="text-accent-500 mb-3" size={40} />
         <p className="text-accent-500 font-bold uppercase tracking-widest">{streamError}</p>
-        <p className="text-gray-500 text-xs mt-2">Verifique as permissões do navegador</p>
+        <p className="text-gray-500 text-xs mt-2">
+          {streamError.includes("HTTPS") 
+            ? "O navegador bloqueia a câmera em sites não seguros (HTTP)." 
+            : "Verifique as permissões do navegador."}
+        </p>
       </div>
     );
   }

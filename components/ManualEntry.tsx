@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Delete, Plus, Check } from 'lucide-react';
+import { Delete, Plus } from 'lucide-react';
 import { CartItem } from '../types';
 
 interface ManualEntryProps {
@@ -105,7 +105,7 @@ export const ManualEntry: React.FC<ManualEntryProps> = ({ onAddItem }) => {
   const btnClear = `${btnBase} bg-accent-500/20 text-accent-500 hover:bg-accent-500/30`;
 
   return (
-    <div className="h-full flex flex-col p-4 pb-0 animate-fade-in">
+    <div className="h-full flex flex-col p-4 pb-0">
       {/* Display Screen */}
       <div className="bg-black border border-dark-800 rounded-3xl p-6 mb-4 flex flex-col items-end justify-center shadow-inner shadow-dark-900 min-h-[140px]">
         <div className="text-gray-500 text-sm h-6 font-mono mb-1">

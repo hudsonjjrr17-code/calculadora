@@ -14,7 +14,6 @@
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3737/3737151.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
@@ -62,12 +61,15 @@
         }
       }
     </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
     <style>
       body {
         overscroll-behavior-y: contain; /* Prevent pull-to-refresh */
         font-family: 'Inter', sans-serif;
         -webkit-tap-highlight-color: transparent; /* Remove gray tap highlight */
         background-color: #000000;
+        color: white; /* Ensure text is visible by default */
       }
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -76,13 +78,6 @@
       .app-select-none {
         user-select: none;
         -webkit-user-select: none;
-      }
-      
-      /* Glass effect fix */
-      .glass {
-        background: rgba(24, 24, 27, 0.7);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
       }
     </style>
   <script type="importmap">
@@ -96,14 +91,13 @@
     "@google/genai": "https://esm.sh/@google/genai@0.1.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "vite": "https://esm.sh/vite@^7.3.0",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "tesseract.js": "https://esm.sh/tesseract.js@^7.0.0"
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-dark-950 text-white fixed inset-0 overflow-hidden">
+  <body class="bg-black text-white fixed inset-0 overflow-hidden">
     <div id="root" class="h-full w-full"></div>
     
     <!-- Vite Entry Point -->

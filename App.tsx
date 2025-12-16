@@ -8,8 +8,14 @@ import { HistoryList } from './components/HistoryList';
 import { AppState, CartItem, ScannedData, ActiveTab, ShoppingSession } from './types';
 import { analyzePriceTag } from './services/geminiService';
 
+// Safe ID generator that works in all environments (http/https/older browsers)
+const generateId = () => {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+};
+
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>(ActiveTab.SCANNER);
+  // Default to CALCULATOR as requested by user
+  const [activeTab, setActiveTab] = useState<ActiveTab>(ActiveTab.CALCULATOR);
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [items, setItems] = useState<CartItem[]>([]);
   const [pendingScan, setPendingScan] = useState<ScannedData | null>(null);
@@ -20,8 +26,12 @@ const App: React.FC = () => {
   
   // History State
   const [history, setHistory] = useState<ShoppingSession[]>(() => {
-    const saved = localStorage.getItem('shopping_history');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('shopping_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
   });
 
   useEffect(() => {
@@ -85,7 +95,7 @@ const App: React.FC = () => {
   const handleAddItem = (newItemData: Omit<CartItem, 'id' | 'totalPrice'>) => {
     const newItem: CartItem = {
       ...newItemData,
-      id: crypto.randomUUID(),
+      id: generateId(),
       totalPrice: newItemData.unitPrice * newItemData.quantity,
     };
     setItems((prev) => [newItem, ...prev]);
@@ -102,7 +112,7 @@ const App: React.FC = () => {
     if (!window.confirm("Finalizar esta compra e salvar no histórico?")) return;
 
     const session: ShoppingSession = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       date: new Date().toISOString(),
       total: totalAmount,
       itemCount: items.length,
@@ -132,7 +142,7 @@ const App: React.FC = () => {
         <div>
            <h1 className="text-2xl font-black italic tracking-tighter text-brand-400">
              {activeTab === ActiveTab.SCANNER && 'SCANNER'}
-             {activeTab === ActiveTab.CALCULATOR && 'MANUAL'}
+             {activeTab === ActiveTab.CALCULATOR && 'CALCULADORA'}
              {activeTab === ActiveTab.HISTORY && 'HISTÓRICO'}
            </h1>
            <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">AI Powered System</p>
@@ -193,16 +203,22 @@ const App: React.FC = () => {
 
         {/* TAB: CALCULATOR (MANUAL) */}
         {activeTab === ActiveTab.CALCULATOR && (
-          <div className="animate-fade-in">
+          <div className="animate-fade-in h-full flex flex-col">
              <ManualEntry onAddItem={handleAddItem} />
-             <div className="px-4 mt-6">
-               <div className="flex items-center gap-2 mb-4 opacity-60">
-                 <div className="h-px bg-dark-800 flex-1"></div>
-                 <span className="text-[10px] uppercase tracking-widest font-black text-dark-800">ITENS ADICIONADOS</span>
-                 <div className="h-px bg-dark-800 flex-1"></div>
-               </div>
-               <CartList items={items} onRemove={handleRemoveItem} />
-            </div>
+             {/* Only show list summary in calc mode if there are items, but keep it minimal or hidden to focus on calc */}
+             {items.length > 0 && (
+               <div className="px-4 mt-2 pb-4">
+                 <div className="flex items-center gap-2 mb-4 opacity-60">
+                   <div className="h-px bg-dark-800 flex-1"></div>
+                   <span className="text-[10px] uppercase tracking-widest font-black text-dark-800">ITENS ADICIONADOS ({items.length})</span>
+                   <div className="h-px bg-dark-800 flex-1"></div>
+                 </div>
+                 {/* Compact list view for calculator tab */}
+                 <div className="max-h-32 overflow-y-auto no-scrollbar">
+                   <CartList items={items} onRemove={handleRemoveItem} />
+                 </div>
+              </div>
+             )}
           </div>
         )}
 
@@ -259,7 +275,7 @@ const App: React.FC = () => {
               className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200 ${activeTab === ActiveTab.CALCULATOR ? 'text-brand-400' : 'text-gray-600 hover:text-gray-400'}`}
             >
               <Calculator size={24} strokeWidth={activeTab === ActiveTab.CALCULATOR ? 3 : 2} />
-              <span className="text-[9px] font-black uppercase tracking-wider">Manual</span>
+              <span className="text-[9px] font-black uppercase tracking-wider">Calc</span>
             </button>
           </li>
           <li>

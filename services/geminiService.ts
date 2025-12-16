@@ -1,14 +1,27 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Initialize the Gemini client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazy initialization to prevent top-level crashes
+let ai: GoogleGenAI | null = null;
+
+const getAi = () => {
+  if (!ai) {
+    // Safety check: ensure process.env exists or handle gracefully
+    // This allows the app to render even if API key setup is pending
+    // @ts-ignore
+    const apiKey = typeof process !== 'undefined' && process.env ? process.env.API_KEY : '';
+    ai = new GoogleGenAI({ apiKey });
+  }
+  return ai;
+};
 
 export const analyzePriceTag = async (base64Image: string): Promise<{ price: number; guessedName: string } | null> => {
   try {
+    const aiClient = getAi();
+    
     // Clean the base64 string (remove the data:image/... prefix)
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
 
-    const response = await ai.models.generateContent({
+    const response = await aiClient.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [

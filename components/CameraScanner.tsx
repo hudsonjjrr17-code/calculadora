@@ -1,13 +1,15 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Camera, AlertTriangle, Zap, ZapOff, Maximize2, Lock, WifiOff } from 'lucide-react';
+import { AppState } from '../types';
 
 interface CameraScannerProps {
   onCapture: (base64Image: string) => void;
   isProcessing: boolean;
   isOffline: boolean;
+  appState: AppState;
 }
 
-export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProcessing, isOffline }) => {
+export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProcessing, isOffline, appState }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -17,6 +19,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   const [hasTorch, setHasTorch] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [flashActive, setFlashActive] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(false);
 
   // Haptic feedback helper
   const triggerHaptic = () => {
@@ -27,6 +30,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
+    setIsCameraReady(false);
     setStreamError(null);
     setIsPermissionError(false);
 
@@ -35,54 +39,65 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       return;
     }
 
+    // Proactively check for 'denied' permission
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        const permissionStatus = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        if (permissionStatus.state === 'denied') {
+          setStreamError("PERMISSÃO DA CÂMERA NEGADA");
+          setIsPermissionError(true);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Permissions API check failed, proceeding.", e);
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        // Fix: Cast video constraints to 'any' to allow 'focusMode', which may not be in the default TS lib definitions.
         video: {
           facingMode: 'environment',
           width: { ideal: 1920 },
           height: { ideal: 1080 },
-          focusMode: 'continuous' // Improve focus for reading text/codes
+          focusMode: 'continuous'
         } as any,
         audio: false,
       });
       streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      if (videoRef.current) videoRef.current.srcObject = stream;
 
       const track = stream.getVideoTracks()[0];
       const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
-      if (capabilities.torch) {
-        setHasTorch(true);
-      }
+      if (capabilities.torch) setHasTorch(true);
       setStreamError(null);
     } catch (err: any) {
       console.error("Error accessing camera:", err);
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setStreamError("PERMISSÃO DA CÂMERA NEGADA");
         setIsPermissionError(true);
-      } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
-        // Fallback if continuous focus is not supported
-        try {
-            const fallbackStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'environment',
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 },
-                }
-            });
-            streamRef.current = fallbackStream;
-            if (videoRef.current) videoRef.current.srcObject = fallbackStream;
-        } catch (fallbackErr) {
-             setStreamError("ERRO AO INICIAR CÂMERA");
-             setIsPermissionError(false);
-        }
       } else {
         setStreamError("ERRO AO INICIAR CÂMERA");
         setIsPermissionError(false);
       }
+    }
+  };
+  
+  const handleCapture = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    
+    setFlashActive(true);
+    setTimeout(() => setFlashActive(false), 200);
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const base64 = canvas.toDataURL('image/jpeg', 0.90);
+      onCapture(base64);
     }
   };
 
@@ -90,54 +105,39 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     if (!isOffline) {
       startCamera();
     }
-
     return () => {
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => {
-          track.stop();
-        });
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, [isOffline]);
+  
+  // Automatic scanning interval
+  useEffect(() => {
+    if (!isCameraReady || isOffline || streamError) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      if (appState === AppState.IDLE) {
+        handleCapture();
+      }
+    }, 2500);
+
+    return () => clearInterval(intervalId);
+  }, [appState, isOffline, streamError, isCameraReady]);
 
   const toggleTorch = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent capture when toggling torch
+    e.stopPropagation();
     triggerHaptic();
     if (streamRef.current && hasTorch) {
       const track = streamRef.current.getVideoTracks()[0];
       const newStatus = !isTorchOn;
       try {
-        await track.applyConstraints({
-          advanced: [{ torch: newStatus } as any]
-        });
+        await track.applyConstraints({ advanced: [{ torch: newStatus } as any] });
         setIsTorchOn(newStatus);
       } catch (err) {
         console.error("Error toggling torch", err);
-      }
-    }
-  };
-
-  const handleCapture = () => {
-    if (isProcessing || isOffline) return;
-
-    // Stronger capture feedback
-    setFlashActive(true);
-    setTimeout(() => setFlashActive(false), 200);
-
-    if (navigator.vibrate) navigator.vibrate(50); 
-    
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const base64 = canvas.toDataURL('image/jpeg', 0.90);
-        onCapture(base64);
       }
     }
   };
@@ -156,7 +156,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
         {isPermissionError ? (
           <>
             <p className="text-gray-500 text-xs mt-2 max-w-[250px]">
-              Para continuar, autorize o acesso à câmera nas configurações do seu navegador.
+              Para escanear, precisamos de acesso à câmera. Por favor, <strong>habilite a permissão nas configurações do seu navegador</strong> (geralmente no ícone de cadeado <Lock size={10} className="inline-block -mt-1"/> na barra de endereço).
             </p>
             <button
               onClick={startCamera}
@@ -176,11 +176,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
   return (
     <div 
-      className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 cursor-pointer"
-      onClick={handleCapture}
+      className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10"
     >
-      
-      {/* Offline Overlay */}
       {isOffline && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 text-center p-4">
           <WifiOff size={40} className="text-gray-600 mb-4" />
@@ -194,42 +191,35 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
         autoPlay
         playsInline
         muted
+        onCanPlay={() => setIsCameraReady(true)}
         className={`w-full h-full object-cover transition-all duration-300 ${isProcessing || isOffline ? 'opacity-50 blur-sm' : 'opacity-100'} ${flashActive ? 'scale-110 brightness-150' : ''}`}
       />
       <canvas ref={canvasRef} className="hidden" />
       
-      {/* Shutter Flash - More impactful */}
       <div 
         className={`absolute inset-0 bg-white/80 pointer-events-none transition-opacity duration-200 z-50 ${flashActive ? 'opacity-100' : 'opacity-0'}`}
       />
 
-      {/* Modern Overlay */}
       <div className="absolute inset-0 pointer-events-none">
-        {/* Blurred Outer Mask */}
         <div className="absolute inset-0">
-          {/* Clear Center Cutout */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%] bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] rounded-3xl"></div>
         </div>
 
-        {/* Scanner Elements */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%]">
-          {/* Corner Brackets - More prominent */}
           <div className="absolute -top-2 -left-2 w-10 h-10 border-t-[6px] border-l-[6px] border-brand-400 rounded-tl-xl"></div>
           <div className="absolute -top-2 -right-2 w-10 h-10 border-t-[6px] border-r-[6px] border-brand-400 rounded-tr-xl"></div>
           <div className="absolute -bottom-2 -left-2 w-10 h-10 border-b-[6px] border-l-[6px] border-brand-400 rounded-bl-xl"></div>
           <div className="absolute -bottom-2 -right-2 w-10 h-10 border-b-[6px] border-r-[6px] border-brand-400 rounded-br-xl"></div>
              
-          {/* Laser Scan Line - Enhanced */}
           {!isProcessing && !isOffline && (
             <div className="absolute left-0 right-0 h-1 bg-brand-400 rounded-full shadow-[0_0_20px_2px_rgba(250,204,21,0.6)] animate-[scan_4s_ease-in-out_infinite]"></div>
           )}
 
-          {/* Status Badge */}
           <div className="absolute -bottom-12 left-0 right-0 flex justify-center">
              <div className="flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10">
                 <Maximize2 size={12} className="text-brand-400 animate-pulse" />
                 <span className="text-[10px] font-bold tracking-[0.2em] text-white/90">
-                  {isProcessing ? 'ANALISANDO...' : 'TOQUE PARA ESCANEAR'}
+                  {isProcessing ? 'ANALISANDO...' : 'APONTE PARA A ETIQUETA'}
                 </span>
              </div>
           </div>
@@ -238,21 +228,12 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
       <style>{`
         @keyframes scan {
-          0% {
-            transform: translateY(-10%);
-            opacity: 0.5;
-          }
-          50% {
-            opacity: 1;
-          }
-          100% {
-            transform: translateY(110%);
-            opacity: 0;
-          }
+          0% { transform: translateY(-10%); opacity: 0.5; }
+          50% { opacity: 1; }
+          100% { transform: translateY(110%); opacity: 0; }
         }
       `}</style>
 
-      {/* Torch Button */}
       {hasTorch && !isOffline && (
         <button
           onClick={toggleTorch}

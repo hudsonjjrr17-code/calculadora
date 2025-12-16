@@ -9,7 +9,7 @@ import { Toast } from './components/Toast';
 import { AppState, CartItem, ScannedData, ActiveTab, ShoppingSession } from './types';
 import { analyzePriceTag } from './services/geminiService';
 
-// Safe ID generator that works in all environments (http/https/older browsers)
+// Safe ID generator that works in all environments (http/https)
 const generateId = () => {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 };
@@ -134,8 +134,9 @@ const App: React.FC = () => {
         setAppState(AppState.CONFIRMING);
         if (navigator.vibrate) navigator.vibrate([10, 50, 10]); // Success haptic for scan
       } else {
-        if (navigator.vibrate) navigator.vibrate([80, 40, 80]); // Error haptic
-        showToast("Nenhum preço reconhecido.", 'error');
+        // In auto-scan mode, we don't want to show an error for every failed attempt.
+        // It will just try again. We only show errors for catastrophic failures.
+        console.log("Scan attempt failed to find a price.");
         setAppState(AppState.IDLE);
       }
     } catch (error) {
@@ -201,6 +202,7 @@ const App: React.FC = () => {
                 onCapture={handleCapture} 
                 isProcessing={appState === AppState.PROCESSING} 
                 isOffline={isOffline}
+                appState={appState}
               />
             </div>
             {/* Lista de itens com altura flexível e rolagem interna */}

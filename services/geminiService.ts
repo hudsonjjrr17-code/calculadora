@@ -29,7 +29,7 @@ export const analyzePriceTag = async (base64Image: string): Promise<{ price: num
             }
           },
           {
-            text: "Analyze this supermarket price tag image. Identify the main product price and the product name. Return the price as a number (use period for decimals) and the name as a string. If you cannot find a price, return 0."
+            text: "Analise esta imagem de etiqueta de supermercado. Identifique o PREÇO principal do produto e o NOME do produto. Retorne o preço como um número (float) e o nome como string. Se não encontrar o preço, retorne 0."
           }
         ]
       },
@@ -40,11 +40,11 @@ export const analyzePriceTag = async (base64Image: string): Promise<{ price: num
           properties: {
             price: { 
               type: Type.NUMBER,
-              description: "The price of the item found in the image."
+              description: "O preço do item encontrado na imagem."
             },
             guessedName: { 
               type: Type.STRING,
-              description: "The name of the product found in the image."
+              description: "O nome curto do produto encontrado na imagem."
             }
           }
         }

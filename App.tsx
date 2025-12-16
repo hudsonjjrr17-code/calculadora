@@ -14,8 +14,8 @@ const generateId = () => {
 };
 
 const App: React.FC = () => {
-  // Default to CALCULATOR as requested by user
-  const [activeTab, setActiveTab] = useState<ActiveTab>(ActiveTab.CALCULATOR);
+  // Default to SCANNER to match user request "identifies prices by pointing camera"
+  const [activeTab, setActiveTab] = useState<ActiveTab>(ActiveTab.SCANNER);
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [items, setItems] = useState<CartItem[]>([]);
   const [pendingScan, setPendingScan] = useState<ScannedData | null>(null);
@@ -47,17 +47,16 @@ const App: React.FC = () => {
         setPendingScan(null);
         setAppState(AppState.IDLE);
       } 
-      // If items exist, ask before leaving context if back is pressed? 
-      // Simplified: If not on Calculator tab, go back to Calculator
-      else if (activeTab !== ActiveTab.CALCULATOR) {
-        setActiveTab(ActiveTab.CALCULATOR);
+      // If on calculator or history, go back to Scanner (Main Tab)
+      else if (activeTab !== ActiveTab.SCANNER) {
+        setActiveTab(ActiveTab.SCANNER);
       }
     };
 
     window.addEventListener('popstate', handlePopState);
 
     // Push state when opening modal or changing tabs to trap back button
-    if (appState === AppState.CONFIRMING || activeTab !== ActiveTab.CALCULATOR) {
+    if (appState === AppState.CONFIRMING || activeTab !== ActiveTab.SCANNER) {
       window.history.pushState({ view: 'modal_or_tab' }, '');
     }
 
@@ -258,8 +257,8 @@ const App: React.FC = () => {
               <div className="mt-4 text-center px-4">
                  <p className="text-gray-500 text-xs font-mono uppercase tracking-tight">
                    {appState === AppState.PROCESSING 
-                     ? "/// PROCESSANDO DADOS ///" 
-                     : "APONTE A CÂMERA PARA O PREÇO"}
+                     ? "/// PROCESSANDO PREÇO ///" 
+                     : "APONTE PARA A ETIQUETA DE PREÇO"}
                  </p>
               </div>
             </div>

@@ -29,7 +29,7 @@ export const analyzePriceTag = async (base64Image: string): Promise<{ price: num
             }
           },
           {
-            text: "Analise esta imagem de etiqueta de supermercado. Identifique o PREÇO principal do produto e o NOME do produto. Retorne o preço como um número (float) e o nome como string. Se não encontrar o preço, retorne 0."
+            text: "Analise esta etiqueta de preço. Extraia duas informações:\n1. O PREÇO principal.\n2. O NOME do produto. IMPORTANTE: O nome deve conter os NÚMEROS, pesos e medidas escritos na etiqueta (ex: 'Coca Cola 2L', 'Arroz 5kg', 'Biscoito 200g'). Transcreva exatamente o texto que identifica o item com seus números."
           }
         ]
       },
@@ -40,11 +40,11 @@ export const analyzePriceTag = async (base64Image: string): Promise<{ price: num
           properties: {
             price: { 
               type: Type.NUMBER,
-              description: "O preço do item encontrado na imagem."
+              description: "O valor do preço encontrado."
             },
             guessedName: { 
               type: Type.STRING,
-              description: "O nome curto do produto encontrado na imagem."
+              description: "O nome completo do produto incluindo números e medidas."
             }
           }
         }

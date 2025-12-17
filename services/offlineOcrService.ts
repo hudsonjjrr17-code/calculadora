@@ -7,15 +7,44 @@ declare global {
   }
 }
 
-// Função auxiliar para carregar uma imagem a partir de uma string base64
-const loadImage = (base64Image: string): Promise<HTMLImageElement> => {
+// Otimização: Em vez de carregar a imagem em alta resolução, nós a desenhamos
+// em um canvas menor. O OCR funciona bem em imagens menores e isso é muito mais rápido.
+const createOptimizedCanvas = (base64Image: string): Promise<HTMLCanvasElement> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
+    img.onload = () => {
+      const MAX_DIMENSION = 1024; // Processar imagens com no máximo 1024px
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        return reject(new Error('Não foi possível obter o contexto do canvas'));
+      }
+
+      let { width, height } = img;
+      if (width > height) {
+        if (width > MAX_DIMENSION) {
+          height = Math.round(height * (MAX_DIMENSION / width));
+          width = MAX_DIMENSION;
+        }
+      } else {
+        if (height > MAX_DIMENSION) {
+          width = Math.round(width * (MAX_DIMENSION / height));
+          height = MAX_DIMENSION;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      // Desenha a imagem redimensionada no canvas
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas);
+    };
     img.onerror = (err) => reject(err);
     img.src = base64Image;
   });
 };
+
 
 // Expressão regular para encontrar preços, lidando com R$, pontos e vírgulas
 const priceRegex = /(?:R\$?\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+[,.]\d{2})/;
@@ -38,8 +67,9 @@ export const analyzeImageOffline = async (base64Image: string): Promise<ScannedD
 
   try {
     const textDetector = new window.TextDetector();
-    const img = await loadImage(base64Image);
-    const detectedTexts = await textDetector.detect(img);
+    // Usa a imagem otimizada em vez da imagem em tamanho real
+    const canvas = await createOptimizedCanvas(base64Image);
+    const detectedTexts = await textDetector.detect(canvas);
 
     if (!detectedTexts || detectedTexts.length === 0) {
       return null;

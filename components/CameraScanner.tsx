@@ -145,7 +145,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   useEffect(() => {
     if (appState === AppState.IDLE && isCameraReady && textDetectorRef.current) {
       // Começa o loop de escaneamento
-      scanIntervalRef.current = window.setInterval(scanFrameForPrice, 750); // Escaneia a cada 750ms
+      scanIntervalRef.current = window.setInterval(scanFrameForPrice, 500); // Escaneia a cada 500ms para uma detecção mais rápida
     } else {
       // Para o loop se o app estiver ocupado ou a câmera não pronta
       if (scanIntervalRef.current) {

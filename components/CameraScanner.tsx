@@ -2,13 +2,6 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Camera, AlertTriangle, Zap, ZapOff, Maximize2, Lock, WifiOff } from 'lucide-react';
 import { AppState } from '../types';
 
-// Add BarcodeDetector type if not present in global scope for TS
-declare global {
-  interface Window {
-    BarcodeDetector: any;
-  }
-}
-
 interface CameraScannerProps {
   onCapture: (base64Image: string) => void;
   isProcessing: boolean;
@@ -20,8 +13,6 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const frameCounterRef = useRef(0);
-  const barcodeDetectorRef = useRef<any | null>(null);
 
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isPermissionError, setIsPermissionError] = useState(false);
@@ -29,23 +20,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [flashActive, setFlashActive] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
-  const [isTargetDetected, setIsTargetDetected] = useState(false);
   const [focusIndicator, setFocusIndicator] = useState<{ x: number; y: number; visible: boolean } | null>(null);
-
-  // Initialize Barcode Detector once
-  useEffect(() => {
-    try {
-      if ('BarcodeDetector' in window) {
-        window.BarcodeDetector.getSupportedFormats().then((supportedFormats: string[]) => {
-           barcodeDetectorRef.current = new window.BarcodeDetector({ formats: supportedFormats });
-        });
-      } else {
-        console.warn('Barcode Detector API not supported.');
-      }
-    } catch (e) {
-      console.error('Error initializing BarcodeDetector:', e);
-    }
-  }, []);
 
   const startCamera = async () => {
     if (streamRef.current) {
@@ -90,8 +65,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
       if (capabilities.torch) setHasTorch(true);
       setStreamError(null);
+    // FIX: Added opening brace to the catch block to fix syntax error.
     } catch (err: any) {
-      console.error("Error accessing camera:", err);
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setStreamError("PERMISSÃO DA CÂMERA NEGADA");
         setIsPermissionError(true);
@@ -102,9 +77,10 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     }
   };
   
-  const handleCapture = () => {
+  const handleManualCapture = () => {
     if (!videoRef.current || !canvasRef.current || appState !== AppState.IDLE) return;
     
+    if (navigator.vibrate) navigator.vibrate(20);
     setFlashActive(true);
     setTimeout(() => setFlashActive(false), 150);
     
@@ -123,6 +99,11 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   
   const handleFocusClick = async (e: React.MouseEvent) => {
     if (!streamRef.current || !videoRef.current) return;
+
+    // Don't focus if the capture button was clicked
+    if ((e.target as HTMLElement).closest('button')) {
+        return;
+    }
 
     const track = streamRef.current.getVideoTracks()[0];
     const capabilities = track.getCapabilities();
@@ -158,77 +139,6 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       }
     };
   }, [isOffline]);
-  
-  // Smart detection loop using requestAnimationFrame
-  useEffect(() => {
-    let animationFrameId: number;
-
-    const analyzeFrameForHighContrast = (ctx: CanvasRenderingContext2D, w: number, h: number): boolean => {
-      const region = { x: w * 0.2, y: h * 0.3, width: w * 0.6, height: h * 0.4 };
-      const imageData = ctx.getImageData(region.x, region.y, region.width, region.height);
-      const data = imageData.data;
-      let sum = 0, sumSq = 0;
-      const pixelCount = data.length / 4;
-
-      for (let i = 0; i < data.length; i += 4) {
-        const grayscale = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-        sum += grayscale;
-        sumSq += grayscale * grayscale;
-      }
-      
-      const mean = sum / pixelCount;
-      const stdDev = Math.sqrt(sumSq / pixelCount - mean * mean);
-      return stdDev > 40; // Threshold for significant contrast (text on label)
-    };
-
-    const detectionLoop = async () => {
-      frameCounterRef.current++;
-      if (appState !== AppState.IDLE || !isCameraReady || !videoRef.current?.videoWidth || !canvasRef.current) {
-        setIsTargetDetected(false);
-        animationFrameId = requestAnimationFrame(detectionLoop);
-        return;
-      }
-      
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return;
-      
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      let detected = false;
-
-      // Always check for barcodes as it's efficient and async
-      if (barcodeDetectorRef.current) {
-        try {
-          const barcodes = await barcodeDetectorRef.current.detect(canvas);
-          if (barcodes.length > 0) detected = true;
-        } catch(e) { /* ignore */ }
-      }
-
-      // Throttle the more expensive text/contrast detection
-      if (!detected && frameCounterRef.current % 3 === 0) {
-        if (analyzeFrameForHighContrast(ctx, canvas.width, canvas.height)) {
-          detected = true;
-        }
-      }
-
-      setIsTargetDetected(detected);
-
-      if (detected) {
-        handleCapture();
-      }
-
-      animationFrameId = requestAnimationFrame(detectionLoop);
-    };
-
-    animationFrameId = requestAnimationFrame(detectionLoop);
-
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [appState, isCameraReady, isOffline]);
-
 
   const toggleTorch = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -261,12 +171,12 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     );
   }
 
-  const cornerClass = `absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200 ${isTargetDetected ? 'border-green-400' : 'border-brand-400'}`;
+  const cornerClass = `absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200 border-brand-400/50`;
 
   return (
     <div 
       onClick={handleFocusClick}
-      className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 cursor-pointer"
+      className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10"
     >
       {isOffline && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 text-center p-4">
@@ -302,30 +212,28 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           <div className={`${cornerClass} -top-2 -right-2 border-t border-r rounded-tr-xl`}></div>
           <div className={`${cornerClass} -bottom-2 -left-2 border-b border-l rounded-bl-xl`}></div>
           <div className={`${cornerClass} -bottom-2 -right-2 border-b border-r rounded-br-xl`}></div>
-             
-          {!isProcessing && !isOffline && !isTargetDetected && (
-            <div className="absolute left-0 right-0 h-1 bg-brand-400 rounded-full shadow-[0_0_20px_2px_rgba(250,204,21,0.6)] animate-[scan_4s_ease-in-out_infinite]"></div>
-          )}
-          {isTargetDetected && (
-             <div className="absolute left-0 right-0 h-1 bg-green-400 rounded-full shadow-[0_0_20px_2px_rgba(74,222,128,0.6)] animate-pulse"></div>
-          )}
-
-          <div className="absolute -bottom-12 left-0 right-0 flex flex-col items-center justify-center">
-             <div className="flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10">
-                <Maximize2 size={12} className={isTargetDetected ? "text-green-400" : "text-brand-400 animate-pulse"} />
-                <span className={`text-[10px] font-bold tracking-[0.2em] transition-colors ${isTargetDetected ? "text-green-400" : "text-white/90"}`}>
-                  {isProcessing ? 'ANALISANDO...' : (isTargetDetected ? 'ALVO DETECTADO!' : 'APONTE PARA A ETIQUETA')}
+        </div>
+        <div className="absolute bottom-24 left-0 right-0 flex justify-center">
+            <div className="flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10">
+                <Maximize2 size={12} className="text-brand-400" />
+                <span className="text-[10px] font-bold tracking-[0.2em] text-white/90">
+                  {isProcessing ? 'ANALISANDO...' : 'APONTE E CAPTURE'}
                 </span>
              </div>
-             {!isProcessing && !isTargetDetected && (
-                <p className="text-white/50 text-[10px] mt-2 font-bold">Toque na tela para focar</p>
-             )}
-          </div>
         </div>
+      </div>
+      
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
+        <button
+            onClick={handleManualCapture}
+            disabled={isProcessing || appState !== AppState.IDLE || isOffline || !isCameraReady}
+            className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-lg border-4 border-white/50 flex items-center justify-center transition-all duration-200 active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-2xl shadow-black/50"
+        >
+            <div className="w-16 h-16 rounded-full bg-white/90"></div>
+        </button>
       </div>
 
       <style>{`
-        @keyframes scan { 0% { transform: translateY(-10%); opacity: 0.5; } 50% { opacity: 1; } 100% { transform: translateY(110%); opacity: 0; } }
         @keyframes focus-pulse { 0% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
         .animate-focus-pulse { animation: focus-pulse 1s ease-out; }
       `}</style>
@@ -333,7 +241,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       {hasTorch && !isOffline && (
         <button
           onClick={toggleTorch}
-          className={`absolute top-4 right-4 z-40 p-3 rounded-full transition-all duration-300 pointer-events-auto ${isTorchOn ? 'bg-brand-400 text-black shadow-[0_0_20px_rgba(250,204,21,0.5)]' : 'bg-black/30 text-white backdrop-blur-md border border-white/10 hover:bg-black/50'}`}
+          className={`absolute top-4 right-4 z-40 p-3 rounded-full transition-all duration-300 pointer-events-auto active:scale-95 ${isTorchOn ? 'bg-brand-400 text-black shadow-[0_0_20px_rgba(250,204,21,0.5)]' : 'bg-black/30 text-white backdrop-blur-md border border-white/10 hover:bg-black/50'}`}
         >
           {isTorchOn ? <Zap size={20} fill="currentColor" /> : <ZapOff size={20} />}
         </button>

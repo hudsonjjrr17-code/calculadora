@@ -26,7 +26,7 @@ export const Toast: React.FC<ToastProps> = ({ message, type, onDismiss }) => {
       >
         {isSuccess ? <CheckCircle size={20} strokeWidth={2.5} /> : <XCircle size={20} strokeWidth={2.5} />}
         <p className="font-bold text-sm flex-1 truncate">{message}</p>
-        <button onClick={onDismiss} className="p-1 -mr-2 opacity-70 hover:opacity-100">
+        <button onClick={onDismiss} className="p-1 -mr-2 opacity-70 hover:opacity-100 transition-transform active:scale-90">
           <X size={18} />
         </button>
       </div>

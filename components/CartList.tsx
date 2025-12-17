@@ -77,7 +77,7 @@ export const CartList: React.FC<CartListProps> = ({ items, onRemove, isCompact =
             </span>
             <button
               onClick={(e) => { e.stopPropagation(); onRemove(item.id); }}
-              className="text-gray-500 hover:text-brand-500 hover:bg-brand-500/10 p-2 -mr-2 rounded-lg transition-all"
+              className="text-gray-500 hover:text-brand-500 hover:bg-brand-500/10 p-2 -mr-2 rounded-lg transition-all active:scale-90"
             >
               <Trash2 size={16} strokeWidth={2} />
             </button>

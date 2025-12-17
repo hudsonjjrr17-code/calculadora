@@ -32,7 +32,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ scannedData, onCon
       <div className="bg-dark-950 w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-brand-500/20 animate-slide-up relative">
         <button 
           onClick={onCancel}
-          className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors"
+          className="absolute top-4 right-4 text-gray-500 hover:text-white transition-transform active:scale-90"
         >
           <X size={24} />
         </button>
@@ -75,7 +75,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ scannedData, onCon
               <div className="flex items-center bg-dark-900 border border-dark-800 rounded-lg overflow-hidden h-[62px]">
                 <button 
                   onClick={decrement}
-                  className="px-4 h-full hover:bg-white/5 text-gray-400 hover:text-white transition-colors text-xl font-bold"
+                  className="px-4 h-full hover:bg-white/5 text-gray-400 hover:text-white transition-all text-xl font-bold active:scale-95 active:bg-white/10"
                 >
                   -
                 </button>
@@ -84,7 +84,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ scannedData, onCon
                 </div>
                 <button 
                   onClick={increment}
-                  className="px-4 h-full hover:bg-white/5 text-brand-500 transition-colors text-xl font-bold"
+                  className="px-4 h-full hover:bg-white/5 text-brand-500 transition-all text-xl font-bold active:scale-95 active:bg-white/10"
                 >
                   +
                 </button>

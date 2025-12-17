@@ -16,7 +16,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onClearHistor
           {history.length > 0 && (
             <button 
               onClick={onClearHistory}
-              className="text-[10px] text-brand-500 hover:text-brand-400 font-bold uppercase tracking-widest flex items-center gap-1 bg-brand-500/10 px-2 py-1 rounded"
+              className="text-[10px] text-brand-500 hover:text-brand-400 font-bold uppercase tracking-widest flex items-center gap-1 bg-brand-500/10 px-2 py-1 rounded active:scale-95 transition-transform"
             >
               <Trash2 size={12} /> Limpar Tudo
             </button>

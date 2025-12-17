@@ -1,4 +1,4 @@
-const CACHE_NAME = 'supermarket-calculadora-v2';
+const CACHE_NAME = 'supermarket-calculadora-v3';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -11,22 +11,10 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('Opened cache and caching files');
+        console.log('Opened cache and caching essential files');
         return cache.addAll(urlsToCache);
       })
-  );
-});
-
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Cache hit - return response
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
-      })
+      .then(() => self.skipWaiting()) // Activate worker immediately
   );
 });
 
@@ -42,6 +30,31 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim()) // Take control of all clients
   );
+});
+
+self.addEventListener('fetch', (event) => {
+  // Use a stale-while-revalidate strategy for all GET requests.
+  if (event.request.method === 'GET') {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(event.request).then((cachedResponse) => {
+          const fetchPromise = fetch(event.request).then((networkResponse) => {
+            // If the request is successful, update the cache.
+            if (networkResponse.ok) {
+              cache.put(event.request, networkResponse.clone());
+            }
+            return networkResponse;
+          }).catch(err => {
+            // Fetch failed, probably offline. The cached response (if exists) is already served.
+            console.warn(`Fetch failed for: ${event.request.url}`, err);
+          });
+
+          // Return the cached response immediately if available, otherwise wait for the network.
+          return cachedResponse || fetchPromise;
+        });
+      })
+    );
+  }
 });

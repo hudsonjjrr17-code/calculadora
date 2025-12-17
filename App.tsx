@@ -1,14 +1,17 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Scan, Calculator, History as HistoryIcon, CheckCircle, Download, ShoppingCart, X, Smartphone, WifiOff, Plus } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Scan, Calculator, History as HistoryIcon, ShoppingCart } from 'lucide-react';
 import { CameraScanner } from './components/CameraScanner';
 import { EditItemModal } from './components/EditItemModal';
 import { CartList } from './components/CartList';
 import { ManualEntry, ManualEntryRef } from './components/ManualEntry';
 import { HistoryList } from './components/HistoryList';
 import { Toast } from './components/Toast';
+import { AppHeader } from './components/Header';
+import { TotalBar } from './components/TotalBar';
 import { AppState, CartItem, ScannedData, ActiveTab, ShoppingSession } from './types';
 import { analyzePriceTag } from './services/geminiService';
-import { analyzeImageOffline } from './services/offlineOcrService';
+import { parseDetectedTexts } from './services/ocrUtils';
+import { optimizeImage } from './services/imageOptimizer';
 
 // Safe ID generator that works in all environments (http/https)
 const generateId = () => {
@@ -21,18 +24,9 @@ const App: React.FC = () => {
   const [items, setItems] = useState<CartItem[]>([]);
   const [pendingScan, setPendingScan] = useState<ScannedData | null>(null);
   
-  // Toast State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error'; id: number } | null>(null);
-
-  // Offline State
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
-
-  // PWA Install State
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallBtn, setShowInstallBtn] = useState(false);
-  const [isInstallBannerVisible, setIsInstallBannerVisible] = useState(true);
   
-  // History State
   const [history, setHistory] = useState<ShoppingSession[]>(() => {
     try {
       const saved = localStorage.getItem('shopping_history');
@@ -42,15 +36,14 @@ const App: React.FC = () => {
     }
   });
 
-  // Calculator State
   const [calculatorLaunchValue, setCalculatorLaunchValue] = useState(0);
   const manualEntryRef = useRef<ManualEntryRef>(null);
+  const currentScanId = useRef<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem('shopping_history', JSON.stringify(history));
   }, [history]);
 
-  // Offline/Online Listeners
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
@@ -62,10 +55,8 @@ const App: React.FC = () => {
     };
   }, []);
 
-
-  // Handle Android Back Button Logic
   useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
+    const handlePopState = () => {
       if (appState === AppState.CONFIRMING) {
         setPendingScan(null);
         setAppState(AppState.IDLE);
@@ -83,33 +74,12 @@ const App: React.FC = () => {
     };
   }, [appState, activeTab]);
 
-  // PWA Install Prompt Listener
-  useEffect(() => {
-    const handler = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setShowInstallBtn(true);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setShowInstallBtn(false);
-    }
-    setDeferredPrompt(null);
-  };
-
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type, id: Date.now() });
   };
 
-  const triggerHaptic = () => {
-    if (navigator.vibrate) navigator.vibrate(10);
+  const triggerHaptic = (ms: number = 10) => {
+    if (navigator.vibrate) navigator.vibrate(ms);
   };
 
   const handleTabChange = (tab: ActiveTab) => {
@@ -119,55 +89,54 @@ const App: React.FC = () => {
 
   const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
 
-  const handleCapture = async (base64Image: string) => {
+  const handleCapture = (base64Image: string, detectedTexts: any[]) => {
     setAppState(AppState.PROCESSING);
+    const scanId = generateId();
+    currentScanId.current = scanId;
+
+    const offlineResult = parseDetectedTexts(detectedTexts);
     
-    let analysisResult: ScannedData | null = null;
-    let usedOfflineFallback = false;
-
-    // Tenta usar a API Gemini se estiver online
-    if (!isOffline) {
-        try {
-            analysisResult = await analyzePriceTag(base64Image);
-        } catch (error) {
-            console.error("Erro na análise com Gemini, tentando fallback offline", error);
-            showToast("Falha na nuvem, usando leitor local.", 'error');
-            analysisResult = null; // Garante que o fallback será acionado
-        }
-    }
-
-    // Se a tentativa com Gemini foi pulada (offline), falhou ou não retornou preço, tenta o OCR local
-    if (!analysisResult || analysisResult.price <= 0) {
-        if (isOffline) {
-            console.log("Modo offline: usando leitor local.");
-        } else {
-            console.log("Fallback: usando leitor local.");
-            usedOfflineFallback = true;
-        }
-
-        try {
-            analysisResult = await analyzeImageOffline(base64Image);
-            if (usedOfflineFallback && analysisResult && analysisResult.price > 0) {
-                showToast("Leitura offline bem-sucedida!", 'success');
-            }
-        } catch (offlineError) {
-            console.error("Erro no OCR offline:", offlineError);
-            analysisResult = null;
-        }
-    }
-
-    // Processa o resultado final, seja da Gemini ou do OCR local
-    if (analysisResult && analysisResult.price > 0) {
-        setPendingScan(analysisResult);
+    if (offlineResult && offlineResult.price > 0) {
+        setPendingScan(offlineResult);
         setAppState(AppState.CONFIRMING);
-        if (navigator.vibrate) navigator.vibrate([10, 50, 10]);
+        triggerHaptic(50);
     } else {
-        console.log("Falha ao encontrar preço na etiqueta.");
-        showToast("Não foi possível ler o preço.", 'error');
-        // O cooldown é essencial para previnir spam de capturas
-        setTimeout(() => setAppState(AppState.IDLE), 1500);
+        showToast("Leitor local falhou, tentando nuvem...", 'error');
     }
+
+    (async () => {
+        if (isOffline) {
+            if (!offlineResult) {
+                showToast("Falha na leitura. Verifique a conexão.", 'error');
+                setAppState(AppState.IDLE);
+            }
+            return;
+        }
+
+        try {
+            const optimizedImage = await optimizeImage(base64Image, { maxWidth: 1024, quality: 0.8 });
+            if (scanId !== currentScanId.current) return;
+
+            const onlineResult = await analyzePriceTag(optimizedImage);
+
+            if (scanId === currentScanId.current && appState === AppState.CONFIRMING && onlineResult?.guessedName) {
+                setPendingScan(prev => (prev ? { ...prev, guessedName: onlineResult.guessedName } : prev));
+            } else if (!offlineResult && onlineResult && onlineResult.price > 0) {
+                setPendingScan(onlineResult);
+                setAppState(AppState.CONFIRMING);
+            } else if (!offlineResult && !onlineResult) {
+                showToast("Não foi possível ler o preço.", 'error');
+                if (scanId === currentScanId.current) setAppState(AppState.IDLE);
+            }
+        } catch (e) {
+            if (!offlineResult && scanId === currentScanId.current) {
+                showToast("Falha na análise da imagem.", 'error');
+                setAppState(AppState.IDLE);
+            }
+        }
+    })();
   };
+
 
   const handleAddItem = (newItemData: Omit<CartItem, 'id' | 'totalPrice'>) => {
     const newItem: CartItem = {
@@ -178,17 +147,17 @@ const App: React.FC = () => {
     setItems((prev) => [newItem, ...prev]);
     setPendingScan(null);
     setAppState(AppState.IDLE);
-    if (navigator.vibrate) navigator.vibrate(20); // Haptic for adding item
+    triggerHaptic(20);
   };
 
   const handleRemoveItem = (id: string) => {
-    if (navigator.vibrate) navigator.vibrate(15);
+    triggerHaptic(15);
     setItems((prev) => prev.filter(item => item.id !== id));
   };
 
   const handleFinalize = () => {
     if (items.length === 0) return;
-    if (navigator.vibrate) navigator.vibrate(20);
+    triggerHaptic(20);
     if (!window.confirm("Finalizar esta compra e salvar no histórico?")) return;
 
     const session: ShoppingSession = {
@@ -202,11 +171,21 @@ const App: React.FC = () => {
     setHistory(prev => [session, ...prev]);
     setItems([]);
     setActiveTab(ActiveTab.HISTORY);
+    showToast("Compra salva no histórico!", "success");
   };
 
   const handleClearHistory = () => {
     if (window.confirm("Apagar todo o histórico de compras?")) {
       setHistory([]);
+      showToast("Histórico limpo.", "success");
+    }
+  };
+
+  const handleReloadSession = (session: ShoppingSession) => {
+    if (window.confirm(`Recarregar o carrinho com ${session.itemCount} itens (R$ ${session.total.toFixed(2)})? O carrinho atual será substituído.`)) {
+      setItems(session.items);
+      setActiveTab(ActiveTab.SCANNER);
+      showToast("Carrinho recarregado do histórico!", "success");
     }
   };
   
@@ -219,7 +198,7 @@ const App: React.FC = () => {
       case ActiveTab.SCANNER:
         return (
           <div className="flex flex-col flex-1 min-h-0 animate-fade-in">
-            <div className="px-4 pt-2 h-2/5 flex-shrink-0">
+            <div className="px-4 pt-2 flex-[0_0_40%] min-h-[250px] flex-shrink-0">
               <CameraScanner 
                 onCapture={handleCapture} 
                 isProcessing={appState === AppState.PROCESSING} 
@@ -227,7 +206,6 @@ const App: React.FC = () => {
                 appState={appState}
               />
             </div>
-            {/* Lista de itens com altura flexível e rolagem interna */}
             <div className="px-4 flex-1 min-h-0 flex flex-col mt-4">
               <div className="flex items-center gap-3 mb-2 opacity-50 shrink-0">
                  <div className="h-px bg-white/20 flex-1"></div>
@@ -257,7 +235,6 @@ const App: React.FC = () => {
                    <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">Últimos Itens</span>
                    <div className="h-px bg-white/20 flex-1"></div>
                  </div>
-                 {/* Mostra apenas os 3 itens mais recentes para economizar espaço */}
                  <div className="max-h-24 overflow-hidden no-scrollbar relative">
                    <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black to-transparent z-10 pointer-events-none"></div>
                    <CartList items={items.slice(0, 3)} onRemove={handleRemoveItem} isCompact={true} />
@@ -269,7 +246,7 @@ const App: React.FC = () => {
       case ActiveTab.HISTORY:
         return (
           <div className="flex-1 min-h-0 animate-fade-in">
-            <HistoryList history={history} onClearHistory={handleClearHistory} />
+            <HistoryList history={history} onClearHistory={handleClearHistory} onReloadSession={handleReloadSession} />
           </div>
         );
     }
@@ -280,96 +257,27 @@ const App: React.FC = () => {
       
       {toast && <Toast key={toast.id} message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
-      {/* iOS Status Bar Spacer */}
       <div className="h-safe-top bg-black w-full shrink-0"></div>
 
-      {/* Header */}
-      <header className="pt-4 pb-2 px-4 bg-gradient-to-b from-black to-transparent z-10 flex justify-between items-center shrink-0 gap-4">
-        {activeTab === ActiveTab.CALCULATOR ? (
-            <button 
-              onClick={handleLaunchFromCalc}
-              disabled={calculatorLaunchValue === 0}
-              className="h-12 text-sm bg-dark-800 border border-brand-500/30 rounded-2xl flex items-center justify-center gap-2 text-brand-500 font-bold uppercase tracking-wider hover:bg-brand-500 hover:text-black transition-all active:scale-95 shadow-lg shadow-brand-500/10 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation px-4 whitespace-nowrap shrink min-w-0"
-            >
-              <Plus size={16} strokeWidth={3} className="shrink-0" />
-              <span className="truncate">Lançar R$ {calculatorLaunchValue.toFixed(2)}</span>
-            </button>
-          ) : (
-            <h1 className="text-2xl font-black italic tracking-tighter text-white truncate">
-              Supermarket Calculadora
-            </h1>
-        )}
-        
-        <div className="flex items-center gap-4 shrink-0">
-          {isOffline && (
-            <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-bold bg-dark-900/50 px-2 py-1 rounded-full border border-dark-800">
-              <WifiOff size={12} strokeWidth={3} />
-              <span>OFFLINE</span>
-            </div>
-          )}
-          {showInstallBtn && (
-            <button
-              onClick={handleInstallClick}
-              className="flex items-center gap-1.5 text-[10px] bg-dark-800 text-white border border-white/10 px-3 py-1.5 rounded-full font-bold hover:bg-brand-500 hover:text-black transition-all active:scale-95"
-            >
-              <Download size={12} strokeWidth={3} />
-              APP
-            </button>
-          )}
-        </div>
-      </header>
+      <AppHeader 
+        activeTab={activeTab}
+        calculatorLaunchValue={calculatorLaunchValue}
+        isOffline={isOffline}
+        onLaunchFromCalc={handleLaunchFromCalc}
+      />
 
-      {/* Main Area com PWA Banner */}
-      {showInstallBtn && isInstallBannerVisible && (
-        <div className="shrink-0 mx-4 mt-2 mb-2 bg-gradient-to-br from-brand-500 to-brand-600 rounded-2xl p-5 text-black shadow-lg shadow-brand-500/10 animate-slide-up relative overflow-hidden group">
-           <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full -mr-10 -mt-10 blur-2xl group-hover:bg-white/30 transition-all"></div>
-           <button onClick={() => setIsInstallBannerVisible(false)} className="absolute top-3 right-3 p-1 text-black/40 hover:text-black transition-colors z-20 active:bg-black/20 rounded-full"><X size={18} /></button>
-           <div className="flex items-center gap-4 relative z-10 mb-3">
-             <div className="bg-black/10 p-3 rounded-xl backdrop-blur-sm"><Smartphone size={24} className="text-black" strokeWidth={2.5} /></div>
-             <div className="flex-1">
-               <h3 className="font-black text-base uppercase leading-none">Instalar App</h3>
-               <p className="text-xs font-medium opacity-80 mt-1">Uso offline e performance nativa</p>
-             </div>
-           </div>
-           <button onClick={handleInstallClick} className="w-full bg-black text-brand-500 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2">
-             <Download size={14} strokeWidth={3} /> Instalar Agora
-           </button>
-        </div>
-      )}
-
-      {/* Main Content Area - Flexível e sem rolagem externa */}
       <main className="flex-1 flex flex-col min-h-0 relative">
         {renderContent()}
       </main>
 
-      {/* Total Bar - Now in the document flow */}
       {(activeTab === ActiveTab.SCANNER || activeTab === ActiveTab.CALCULATOR) && (
-        <div className="shrink-0 px-4 pb-2 z-10">
-          <div className="bg-dark-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-[0_8px_30px_rgb(0,0,0,0.5)] flex justify-between items-center transition-all duration-300">
-            <div>
-              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">Total Estimado</p>
-              <div className="text-3xl font-black text-white font-mono tracking-tighter leading-none flex items-baseline">
-                <span className="text-brand-500 text-lg mr-1.5">R$</span>
-                {totalAmount.toFixed(2)}
-              </div>
-            </div>
-            <button 
-              onClick={handleFinalize}
-              disabled={items.length === 0}
-              className={`h-12 px-6 rounded-xl font-bold uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 ${
-                items.length > 0 
-                ? 'bg-brand-500 text-black hover:bg-brand-400 shadow-[0_0_20px_rgba(234,179,8,0.25)]' 
-                : 'bg-white/5 text-gray-500 border border-white/5 cursor-not-allowed'
-              }`}
-            >
-              <span className="text-xs">Finalizar</span>
-              <CheckCircle size={18} strokeWidth={2.5} />
-            </button>
-          </div>
-        </div>
+        <TotalBar 
+          totalAmount={totalAmount}
+          itemCount={items.length}
+          onFinalize={handleFinalize}
+        />
       )}
 
-      {/* Navigation */}
       <nav className="shrink-0 bg-black/95 border-t border-white/5 pb-safe-bottom pt-2 px-2 z-20 h-[75px] relative">
         <ul className="flex justify-around items-center h-full pb-2">
           <li>
@@ -402,7 +310,6 @@ const App: React.FC = () => {
         </ul>
       </nav>
 
-      {/* Modals */}
       {appState === AppState.CONFIRMING && pendingScan && (
         <EditItemModal
           scannedData={pendingScan}

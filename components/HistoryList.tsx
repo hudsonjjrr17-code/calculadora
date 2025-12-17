@@ -1,13 +1,14 @@
 import React from 'react';
 import { ShoppingSession } from '../types';
-import { Calendar, ShoppingBag, Trash2, Clock, CheckCircle } from 'lucide-react';
+import { Calendar, ShoppingBag, Trash2, Clock, CheckCircle, RotateCcw } from 'lucide-react';
 
 interface HistoryListProps {
   history: ShoppingSession[];
   onClearHistory: () => void;
+  onReloadSession: (session: ShoppingSession) => void;
 }
 
-export const HistoryList: React.FC<HistoryListProps> = ({ history, onClearHistory }) => {
+export const HistoryList: React.FC<HistoryListProps> = ({ history, onClearHistory, onReloadSession }) => {
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 shrink-0">
@@ -33,8 +34,8 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onClearHistor
         <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-4 pb-24">
           <div className="space-y-4">
             {history.map((session) => (
-              <div key={session.id} className="bg-dark-900 border border-dark-800 rounded-lg p-4 shadow-sm flex justify-between items-center hover:border-brand-500/30 transition-colors">
-                <div>
+              <div key={session.id} className="bg-dark-900 border border-dark-800 rounded-lg p-4 shadow-sm flex items-center hover:border-brand-500/30 transition-colors">
+                <div className="flex-1">
                   <div className="flex items-center gap-2 text-gray-500 text-[10px] mb-1 font-mono uppercase">
                     <Calendar size={10} />
                     {new Date(session.date).toLocaleDateString('pt-BR')} 
@@ -51,8 +52,17 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onClearHistor
                   </div>
                 </div>
                 
-                <div className="h-8 w-8 rounded bg-brand-500 flex items-center justify-center text-black shadow-[0_0_10px_rgba(234,179,8,0.2)]">
-                  <CheckCircle size={16} strokeWidth={3} />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onReloadSession(session)}
+                    className="p-2 rounded-lg text-gray-500 hover:bg-white/10 hover:text-white transition-all active:scale-90"
+                    title="Recarregar este carrinho"
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                  <div className="h-8 w-8 rounded bg-brand-500 flex items-center justify-center text-black shadow-[0_0_10px_rgba(234,179,8,0.2)]">
+                    <CheckCircle size={16} strokeWidth={3} />
+                  </div>
                 </div>
               </div>
             ))}

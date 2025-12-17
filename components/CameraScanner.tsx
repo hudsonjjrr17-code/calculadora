@@ -1,31 +1,31 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera, AlertTriangle, Zap, ZapOff, Maximize2, Lock, WifiOff } from 'lucide-react';
+import { Camera, AlertTriangle, Zap, ZapOff, Maximize2, Lock, WifiOff, MousePointerClick } from 'lucide-react';
 import { AppState } from '../types';
 
 interface CameraScannerProps {
-  onCapture: (base64Image: string) => void;
+  onCapture: (base64Image: string, detectedTexts: any[]) => void;
   isProcessing: boolean;
   isOffline: boolean;
   appState: AppState;
 }
 
-// Regex para encontrar preços de forma eficiente no loop de scan
+// Regex to find prices efficiently in the scan loop
 const priceRegex = /(?:R\$?\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+[,.]\d{2})/;
 
 export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProcessing, isOffline, appState }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const scanIntervalRef = useRef<number | null>(null);
   const textDetectorRef = useRef<any | null>(null);
-
+  const isDetectingRef = useRef(false);
+  
+  const [isTextDetectorSupported, setIsTextDetectorSupported] = useState(true);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isPermissionError, setIsPermissionError] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [flashActive, setFlashActive] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
-  const [focusIndicator, setFocusIndicator] = useState<{ x: number; y: number; visible: boolean } | null>(null);
 
   const startCamera = async () => {
     if (streamRef.current) {
@@ -40,13 +40,16 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       return;
     }
     
-    // Inicializa o TextDetector se disponível
     if ('TextDetector' in window && !textDetectorRef.current) {
       try {
         textDetectorRef.current = new (window as any).TextDetector();
+        setIsTextDetectorSupported(true);
       } catch (e) {
-        console.warn("Falha ao inicializar TextDetector:", e);
+        console.warn("TextDetector failed to initialize, auto-capture disabled:", e);
+        setIsTextDetectorSupported(false);
       }
+    } else if (!('TextDetector' in window)) {
+       setIsTextDetectorSupported(false);
     }
 
     try {
@@ -78,7 +81,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   };
   
   const takeHighResPicture = () => {
-    if (!videoRef.current || !canvasRef.current) return null;
+    if (!videoRef.current || !canvasRef.current || appState !== AppState.IDLE) return null;
     
     if (navigator.vibrate) navigator.vibrate(20);
     setFlashActive(true);
@@ -98,67 +101,58 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   }
   
   const handleManualCapture = () => {
-    if (appState !== AppState.IDLE) return;
+    if (appState !== AppState.IDLE || !videoRef.current) return;
     const base64 = takeHighResPicture();
     if (base64) {
-      onCapture(base64);
+      // For manual capture, we don't have pre-detected text, so we pass an empty array.
+      onCapture(base64, []);
     }
   };
 
   const scanFrameForPrice = async () => {
-    if (!videoRef.current || videoRef.current.paused || videoRef.current.ended || appState !== AppState.IDLE || !textDetectorRef.current) {
+    if (appState !== AppState.IDLE || !videoRef.current || videoRef.current.paused || !textDetectorRef.current || isDetectingRef.current) {
+        if (appState === AppState.IDLE) requestAnimationFrame(scanFrameForPrice);
         return;
     }
 
+    isDetectingRef.current = true;
+
     try {
         const detectedTexts = await textDetectorRef.current.detect(videoRef.current);
+        let priceFound = false;
         for (const text of detectedTexts) {
             if (priceRegex.test(text.rawValue)) {
-                // Preço encontrado, aciona a captura!
-                const base64 = takeHighResPicture();
-                if (base64) {
-                  onCapture(base64);
-                }
-                return; // Para o scan até o próximo ciclo
+                priceFound = true;
+                break;
             }
         }
+        if (priceFound) {
+            const base64 = takeHighResPicture();
+            if (base64) onCapture(base64, detectedTexts);
+            // The loop stops and will be restarted by App.tsx when the state returns to IDLE
+        }
     } catch (e) {
-        // Ignora erros de detecção para manter o loop rodando
+        // Ignore errors
+    } finally {
+        isDetectingRef.current = false;
+        if (appState === AppState.IDLE) requestAnimationFrame(scanFrameForPrice);
     }
   };
 
   useEffect(() => {
-    if (!isOffline) {
-      startCamera();
-    }
+    if (!isOffline) startCamera();
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
-      if (scanIntervalRef.current) {
-        clearInterval(scanIntervalRef.current);
-      }
     };
   }, [isOffline]);
   
-  // Efeito para controlar o loop de escaneamento automático
   useEffect(() => {
-    if (appState === AppState.IDLE && isCameraReady && textDetectorRef.current) {
-      // Começa o loop de escaneamento
-      scanIntervalRef.current = window.setInterval(scanFrameForPrice, 500); // Escaneia a cada 500ms para uma detecção mais rápida
-    } else {
-      // Para o loop se o app estiver ocupado ou a câmera não pronta
-      if (scanIntervalRef.current) {
-        clearInterval(scanIntervalRef.current);
-        scanIntervalRef.current = null;
-      }
+    if (appState === AppState.IDLE && isCameraReady && textDetectorRef.current && isTextDetectorSupported) {
+      requestAnimationFrame(scanFrameForPrice);
     }
-    return () => {
-      if (scanIntervalRef.current) {
-        clearInterval(scanIntervalRef.current);
-      }
-    };
-  }, [appState, isCameraReady]);
+  }, [appState, isCameraReady, isTextDetectorSupported]);
 
   const toggleTorch = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -191,12 +185,18 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     );
   }
 
-  const cornerClass = `absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200 ${appState === AppState.IDLE ? 'border-brand-400/50' : 'border-gray-600/50'}`;
+  const cornerClass = `absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200 ${appState === AppState.IDLE ? 'animate-scanner-breathing' : 'border-gray-600/50'}`;
+  
+  const getStatusText = () => {
+    if (isProcessing) return 'ANALISANDO...';
+    if (!isTextDetectorSupported) return 'TOQUE PARA ESCANEAR';
+    return 'PROCURANDO PREÇO...';
+  }
 
   return (
     <div 
-      onClick={handleManualCapture}
-      className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 cursor-pointer"
+      onClick={!isTextDetectorSupported ? handleManualCapture : undefined}
+      className={`relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 ${!isTextDetectorSupported ? 'cursor-pointer' : 'cursor-default'}`}
     >
       {isOffline && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 text-center p-4">
@@ -217,13 +217,6 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       <canvas ref={canvasRef} className="hidden" />
       
       <div className={`absolute inset-0 bg-white/80 pointer-events-none transition-opacity duration-200 z-50 ${flashActive ? 'opacity-100' : 'opacity-0'}`} />
-      
-      {focusIndicator?.visible && (
-        <div 
-          className="absolute w-16 h-16 border-2 border-white rounded-full transition-all duration-500 z-40 animate-focus-pulse pointer-events-none"
-          style={{ left: focusIndicator.x, top: focusIndicator.y, transform: 'translate(-50%, -50%)' }}
-        />
-      )}
 
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute inset-0"><div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%] bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] rounded-3xl"></div></div>
@@ -234,19 +227,17 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           <div className={`${cornerClass} -bottom-2 -right-2 border-b border-r rounded-br-xl`}></div>
         </div>
         <div className="absolute bottom-6 left-0 right-0 flex justify-center">
-            <div className={`flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 transition-all ${appState === AppState.IDLE ? 'animate-pulse-fast' : ''}`}>
-                <Maximize2 size={12} className={appState === AppState.IDLE ? 'text-brand-400' : 'text-gray-500'} />
+            <div className={`flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 transition-all ${appState === AppState.IDLE && isTextDetectorSupported ? 'animate-pulse-fast' : ''}`}>
+                {isTextDetectorSupported ?
+                  <Maximize2 size={12} className={appState === AppState.IDLE ? 'text-brand-400' : 'text-gray-500'} /> :
+                  <MousePointerClick size={12} className={appState === AppState.IDLE ? 'text-brand-400' : 'text-gray-500'} />
+                }
                 <span className="text-[10px] font-bold tracking-[0.2em] text-white/90">
-                  {isProcessing ? 'ANALISANDO...' : 'PROCURANDO PREÇO...'}
+                  {getStatusText()}
                 </span>
              </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes focus-pulse { 0% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
-        .animate-focus-pulse { animation: focus-pulse 1s ease-out; }
-      `}</style>
 
       {hasTorch && !isOffline && (
         <button

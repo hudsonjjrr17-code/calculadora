@@ -3,7 +3,7 @@ import { Camera, AlertTriangle, Zap, ZapOff, Maximize2, Lock, WifiOff, MousePoin
 import { AppState } from '../types';
 
 interface CameraScannerProps {
-  onCapture: (base64Image: string, detectedTexts: any[]) => void;
+  onCapture: (base64Image: string, detectedTexts: any[], detectedBarcodes: any[]) => void;
   isProcessing: boolean;
   isOffline: boolean;
   appState: AppState;
@@ -17,9 +17,11 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const textDetectorRef = useRef<any | null>(null);
+  const barcodeDetectorRef = useRef<any | null>(null);
   const isDetectingRef = useRef(false);
   
   const [isTextDetectorSupported, setIsTextDetectorSupported] = useState(true);
+  const [isBarcodeDetectorSupported, setIsBarcodeDetectorSupported] = useState(true);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isPermissionError, setIsPermissionError] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
@@ -40,17 +42,32 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       return;
     }
     
+    // Initialize Text Detector
     if ('TextDetector' in window && !textDetectorRef.current) {
       try {
         textDetectorRef.current = new (window as any).TextDetector();
         setIsTextDetectorSupported(true);
       } catch (e) {
-        console.warn("TextDetector failed to initialize, auto-capture disabled:", e);
+        console.warn("TextDetector failed to initialize:", e);
         setIsTextDetectorSupported(false);
       }
     } else if (!('TextDetector' in window)) {
        setIsTextDetectorSupported(false);
     }
+
+    // Initialize Barcode Detector
+    if ('BarcodeDetector' in window && !barcodeDetectorRef.current) {
+      try {
+        barcodeDetectorRef.current = new (window as any).BarcodeDetector({ formats: ['ean_13', 'upc_a', 'qr_code', 'code_128'] });
+        setIsBarcodeDetectorSupported(true);
+      } catch(e) {
+        console.warn("BarcodeDetector failed to initialize:", e);
+        setIsBarcodeDetectorSupported(false);
+      }
+    } else if (!('BarcodeDetector' in window)) {
+      setIsBarcodeDetectorSupported(false);
+    }
+
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -58,7 +75,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           facingMode: 'environment',
           width: { ideal: 1920 },
           height: { ideal: 1080 },
-          focusMode: 'continuous'
+          focusMode: 'continuous',
+          frameRate: { ideal: 30 }
         } as any,
         audio: false,
       });
@@ -68,6 +86,12 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       const track = stream.getVideoTracks()[0];
       const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
       if (capabilities.torch) setHasTorch(true);
+      
+      // Ensure continuous focus is applied if supported
+      if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+        await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] } as any);
+      }
+
       setStreamError(null);
     } catch (err: any) {
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
@@ -104,38 +128,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     if (appState !== AppState.IDLE || !videoRef.current) return;
     const base64 = takeHighResPicture();
     if (base64) {
-      // For manual capture, we don't have pre-detected text, so we pass an empty array.
-      onCapture(base64, []);
-    }
-  };
-
-  const scanFrameForPrice = async () => {
-    if (appState !== AppState.IDLE || !videoRef.current || videoRef.current.paused || !textDetectorRef.current || isDetectingRef.current) {
-        if (appState === AppState.IDLE) requestAnimationFrame(scanFrameForPrice);
-        return;
-    }
-
-    isDetectingRef.current = true;
-
-    try {
-        const detectedTexts = await textDetectorRef.current.detect(videoRef.current);
-        let priceFound = false;
-        for (const text of detectedTexts) {
-            if (priceRegex.test(text.rawValue)) {
-                priceFound = true;
-                break;
-            }
-        }
-        if (priceFound) {
-            const base64 = takeHighResPicture();
-            if (base64) onCapture(base64, detectedTexts);
-            // The loop stops and will be restarted by App.tsx when the state returns to IDLE
-        }
-    } catch (e) {
-        // Ignore errors
-    } finally {
-        isDetectingRef.current = false;
-        if (appState === AppState.IDLE) requestAnimationFrame(scanFrameForPrice);
+      onCapture(base64, [], []);
     }
   };
 
@@ -149,10 +142,57 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   }, [isOffline]);
   
   useEffect(() => {
-    if (appState === AppState.IDLE && isCameraReady && textDetectorRef.current && isTextDetectorSupported) {
-      requestAnimationFrame(scanFrameForPrice);
+    const scanFrame = async () => {
+      if (appState !== AppState.IDLE || !isCameraReady || isDetectingRef.current || !videoRef.current || videoRef.current.paused) {
+        return;
+      }
+
+      isDetectingRef.current = true;
+      const video = videoRef.current;
+
+      try {
+        const detectionPromises = [];
+        if (textDetectorRef.current) detectionPromises.push(textDetectorRef.current.detect(video));
+        if (barcodeDetectorRef.current) detectionPromises.push(barcodeDetectorRef.current.detect(video));
+        
+        if (detectionPromises.length === 0) {
+            isDetectingRef.current = false;
+            return;
+        }
+
+        const results = await Promise.all(detectionPromises);
+        
+        if (appState !== AppState.IDLE) return;
+        
+        const detectedTexts = textDetectorRef.current ? results[0] : [];
+        const detectedBarcodes = barcodeDetectorRef.current ? results[textDetectorRef.current ? 1 : 0] : [];
+
+        const priceFound = detectedTexts.some((text: any) => priceRegex.test(text.rawValue));
+        const barcodeFound = detectedBarcodes && detectedBarcodes.length > 0;
+
+        if (priceFound || barcodeFound) {
+          const base64 = takeHighResPicture();
+          if (base64) {
+            onCapture(base64, detectedTexts, detectedBarcodes);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Detection failed for a frame.', e);
+      } finally {
+        isDetectingRef.current = false;
+      }
+      
+      if (appState === AppState.IDLE) {
+        requestAnimationFrame(scanFrame);
+      }
+    };
+
+    const canAutoScan = isTextDetectorSupported || isBarcodeDetectorSupported;
+    if (appState === AppState.IDLE && isCameraReady && canAutoScan) {
+      scanFrame();
     }
-  }, [appState, isCameraReady, isTextDetectorSupported]);
+  }, [appState, isCameraReady, isTextDetectorSupported, isBarcodeDetectorSupported, onCapture]);
 
   const toggleTorch = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -185,18 +225,28 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     );
   }
 
-  const cornerClass = `absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200 ${appState === AppState.IDLE ? 'animate-scanner-breathing' : 'border-gray-600/50'}`;
+  const canAutoScan = isTextDetectorSupported || isBarcodeDetectorSupported;
+  let cornerClass = 'absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200';
+  if (appState === AppState.IDLE) {
+    if (canAutoScan) {
+      cornerClass += ' animate-scanner-breathing';
+    } else {
+      cornerClass += ' border-gray-500';
+    }
+  } else {
+    cornerClass += ' border-gray-600/50';
+  }
   
   const getStatusText = () => {
     if (isProcessing) return 'ANALISANDO...';
-    if (!isTextDetectorSupported) return 'TOQUE PARA ESCANEAR';
-    return 'PROCURANDO PREÇO...';
+    if (!canAutoScan) return 'TOQUE PARA ESCANEAR';
+    return 'PROCURANDO PREÇO/CÓDIGO...';
   }
 
   return (
     <div 
-      onClick={!isTextDetectorSupported ? handleManualCapture : undefined}
-      className={`relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 ${!isTextDetectorSupported ? 'cursor-pointer' : 'cursor-default'}`}
+      onClick={!canAutoScan ? handleManualCapture : undefined}
+      className={`relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 ${!canAutoScan ? 'cursor-pointer' : 'cursor-default'}`}
     >
       {isOffline && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 text-center p-4">
@@ -227,8 +277,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           <div className={`${cornerClass} -bottom-2 -right-2 border-b border-r rounded-br-xl`}></div>
         </div>
         <div className="absolute bottom-6 left-0 right-0 flex justify-center">
-            <div className={`flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 transition-all ${appState === AppState.IDLE && isTextDetectorSupported ? 'animate-pulse-fast' : ''}`}>
-                {isTextDetectorSupported ?
+            <div className={`flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 transition-all ${appState === AppState.IDLE && canAutoScan ? 'animate-pulse-fast' : ''}`}>
+                {canAutoScan ?
                   <Maximize2 size={12} className={appState === AppState.IDLE ? 'text-brand-400' : 'text-gray-500'} /> :
                   <MousePointerClick size={12} className={appState === AppState.IDLE ? 'text-brand-400' : 'text-gray-500'} />
                 }

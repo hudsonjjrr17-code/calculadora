@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ScannedData, CartItem } from '../types';
-import { X, Check } from 'lucide-react';
+import { X, Check, Barcode } from 'lucide-react';
 
 interface EditItemModalProps {
   scannedData: ScannedData;
@@ -10,12 +10,12 @@ interface EditItemModalProps {
 
 export const EditItemModal: React.FC<EditItemModalProps> = ({ scannedData, onConfirm, onCancel }) => {
   const [name, setName] = useState(scannedData.guessedName);
-  const [price, setPrice] = useState(scannedData.price.toString());
+  const [price, setPrice] = useState(scannedData.price > 0 ? scannedData.price.toString() : '');
   const [quantity, setQuantity] = useState(1);
   
   const handleConfirm = () => {
     const parsedPrice = parseFloat(price.replace(',', '.'));
-    if (isNaN(parsedPrice) || parsedPrice < 0) return;
+    if (isNaN(parsedPrice) || parsedPrice <= 0) return;
     
     onConfirm({
       name: name.trim() || 'ITEM GENÉRICO',
@@ -52,6 +52,19 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ scannedData, onCon
             />
           </div>
 
+          {/* Barcode Display */}
+          {scannedData.productCode && (
+              <div>
+                  <label className="flex items-center gap-1.5 text-[10px] text-gray-500 mb-1.5 uppercase tracking-widest font-bold">
+                    <Barcode size={12} />
+                    Código de Barras
+                  </label>
+                  <div className="w-full bg-dark-800/50 border border-dark-800 rounded-lg px-4 py-3 text-gray-400 font-mono text-xs text-center tracking-widest">
+                      {scannedData.productCode}
+                  </div>
+              </div>
+          )}
+
           <div className="flex gap-4">
             {/* Price Input */}
             <div className="flex-1">
@@ -64,6 +77,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ scannedData, onCon
                   step="0.01"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
+                  placeholder="0.00"
                   className="w-full bg-dark-900 border border-dark-800 rounded-lg pl-9 pr-4 py-4 text-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-all font-mono font-bold text-lg"
                 />
               </div>

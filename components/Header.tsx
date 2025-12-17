@@ -52,7 +52,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               <span className="truncate">Lançar R$ {calculatorLaunchValue.toFixed(2)}</span>
             </button>
           ) : (
-            <h1 className="text-2xl font-black italic tracking-tighter text-white truncate">
+            <h1 className="text-2xl font-black italic tracking-tighter text-red-500 truncate">
               Supermarket Calculadora
             </h1>
         )}

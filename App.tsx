@@ -89,52 +89,87 @@ const App: React.FC = () => {
 
   const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
 
-  const handleCapture = (base64Image: string, detectedTexts: any[]) => {
+  const handleCapture = async (base64Image: string, detectedTexts: any[], detectedBarcodes: any[]) => {
     setAppState(AppState.PROCESSING);
+    triggerHaptic(50); // Immediate feedback on successful capture
     const scanId = generateId();
     currentScanId.current = scanId;
 
-    const offlineResult = parseDetectedTexts(detectedTexts);
-    
-    if (offlineResult && offlineResult.price > 0) {
-        setPendingScan(offlineResult);
-        setAppState(AppState.CONFIRMING);
-        triggerHaptic(50);
-    } else {
-        showToast("Leitor local falhou, tentando nuvem...", 'error');
+    // 1. Parse local data for immediate results
+    const offlineTextResult = parseDetectedTexts(detectedTexts);
+    const firstBarcode = detectedBarcodes?.[0]?.rawValue;
+    const initialScanData: ScannedData = { price: 0, guessedName: '', productCode: firstBarcode || '' };
+
+    if (offlineTextResult && offlineTextResult.price > 0) {
+        initialScanData.price = offlineTextResult.price;
+        initialScanData.guessedName = offlineTextResult.guessedName;
+    }
+    if (firstBarcode && !initialScanData.guessedName) {
+        initialScanData.guessedName = 'Item escaneado';
     }
 
-    (async () => {
-        if (isOffline) {
-            if (!offlineResult) {
-                showToast("Falha na leitura. Verifique a conexão.", 'error');
-                setAppState(AppState.IDLE);
-            }
-            return;
+    // 2. Handle offline case: must show modal as we can't be sure of the name
+    if (isOffline) {
+        if (initialScanData.price > 0 || initialScanData.productCode) {
+            setPendingScan(initialScanData);
+            setAppState(AppState.CONFIRMING);
+        } else {
+            showToast("Falha na leitura. Verifique a conexão.", 'error');
+            setAppState(AppState.IDLE);
         }
+        return;
+    }
 
-        try {
-            const optimizedImage = await optimizeImage(base64Image, { maxWidth: 1024, quality: 0.8 });
-            if (scanId !== currentScanId.current) return;
+    // 3. Online: Enhance with Gemini and decide whether to auto-add or confirm
+    try {
+        const optimizedImage = await optimizeImage(base64Image, { maxWidth: 1024, quality: 0.8 });
+        if (scanId !== currentScanId.current) return; // Abort if a new scan has started
 
-            const onlineResult = await analyzePriceTag(optimizedImage);
+        const onlineResult = await analyzePriceTag(optimizedImage);
+        if (scanId !== currentScanId.current) return;
 
-            if (scanId === currentScanId.current && appState === AppState.CONFIRMING && onlineResult?.guessedName) {
-                setPendingScan(prev => (prev ? { ...prev, guessedName: onlineResult.guessedName } : prev));
-            } else if (!offlineResult && onlineResult && onlineResult.price > 0) {
-                setPendingScan(onlineResult);
-                setAppState(AppState.CONFIRMING);
-            } else if (!offlineResult && !onlineResult) {
-                showToast("Não foi possível ler o preço.", 'error');
-                if (scanId === currentScanId.current) setAppState(AppState.IDLE);
-            }
-        } catch (e) {
-            if (!offlineResult && scanId === currentScanId.current) {
-                showToast("Falha na análise da imagem.", 'error');
-                setAppState(AppState.IDLE);
+        // 4. Merge local and online results
+        const finalScanData = { ...initialScanData };
+        if (onlineResult) {
+            finalScanData.guessedName = onlineResult.guessedName || initialScanData.guessedName;
+            if (finalScanData.price === 0 && onlineResult.price > 0) {
+                finalScanData.price = onlineResult.price;
             }
         }
-    })();
+        
+        // 5. AUTO-ADD vs. MANUAL CONFIRMATION LOGIC
+        const hasPrice = finalScanData.price > 0;
+        const hasGoodName = finalScanData.guessedName && !['Item escaneado', 'Item desconhecido'].includes(finalScanData.guessedName) && finalScanData.guessedName.length > 3;
+
+        if (hasPrice && hasGoodName) {
+            // High confidence: Auto-add to cart
+            showToast(`Adicionado: ${finalScanData.guessedName}`, 'success');
+            handleAddItem({
+                name: finalScanData.guessedName,
+                unitPrice: finalScanData.price,
+                quantity: 1,
+            });
+        } else if (hasPrice || finalScanData.productCode) {
+            // Medium confidence: Show modal for user confirmation
+            setPendingScan(finalScanData);
+            setAppState(AppState.CONFIRMING);
+        } else {
+            // Low confidence: Show error and reset
+            showToast("Não foi possível ler o preço ou código.", 'error');
+            setAppState(AppState.IDLE);
+        }
+
+    } catch (e) {
+        console.error("Error during capture processing:", e);
+        // Fallback to local data if API fails
+        if (initialScanData.price > 0 || initialScanData.productCode) {
+            setPendingScan(initialScanData);
+            setAppState(AppState.CONFIRMING);
+        } else {
+            showToast("Falha na análise da imagem.", 'error');
+            setAppState(AppState.IDLE);
+        }
+    }
   };
 
 

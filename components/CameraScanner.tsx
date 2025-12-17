@@ -65,7 +65,6 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
       if (capabilities.torch) setHasTorch(true);
       setStreamError(null);
-    // FIX: Added opening brace to the catch block to fix syntax error.
     } catch (err: any) {
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setStreamError("PERMISSÃO DA CÂMERA NEGADA");
@@ -97,36 +96,30 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     }
   };
   
-  const handleFocusClick = async (e: React.MouseEvent) => {
-    if (!streamRef.current || !videoRef.current) return;
-
-    // Don't focus if the capture button was clicked
-    if ((e.target as HTMLElement).closest('button')) {
-        return;
-    }
+  const handleViewfinderTap = async (e: React.MouseEvent) => {
+    if (!streamRef.current || !videoRef.current || appState !== AppState.IDLE) return;
 
     const track = streamRef.current.getVideoTracks()[0];
     const capabilities = track.getCapabilities();
 
-    if (!(capabilities as any).pointsOfInterest) {
-      console.warn('Focus point not supported by this device.');
-      return;
+    if ((capabilities as any).pointsOfInterest) {
+      const rect = videoRef.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+
+      setFocusIndicator({ x: e.clientX - rect.left, y: e.clientY - rect.top, visible: true });
+      setTimeout(() => setFocusIndicator(f => f ? { ...f, visible: false } : null), 1000);
+
+      try {
+        await (track as any).applyConstraints({
+          advanced: [{ pointsOfInterest: [{ x, y }] }]
+        });
+      } catch (error) {
+        console.error('Failed to set focus point:', error);
+      }
     }
-
-    const rect = videoRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-
-    setFocusIndicator({ x: e.clientX - rect.left, y: e.clientY - rect.top, visible: true });
-    setTimeout(() => setFocusIndicator(f => f ? { ...f, visible: false } : null), 1000);
-
-    try {
-      await (track as any).applyConstraints({
-        advanced: [{ pointsOfInterest: [{ x, y }] }]
-      });
-    } catch (error) {
-      console.error('Failed to set focus point:', error);
-    }
+    
+    handleManualCapture();
   };
 
   useEffect(() => {
@@ -175,8 +168,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
   return (
     <div 
-      onClick={handleFocusClick}
-      className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10"
+      onClick={handleViewfinderTap}
+      className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 cursor-pointer"
     >
       {isOffline && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 text-center p-4">
@@ -213,24 +206,14 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           <div className={`${cornerClass} -bottom-2 -left-2 border-b border-l rounded-bl-xl`}></div>
           <div className={`${cornerClass} -bottom-2 -right-2 border-b border-r rounded-br-xl`}></div>
         </div>
-        <div className="absolute bottom-24 left-0 right-0 flex justify-center">
+        <div className="absolute bottom-6 left-0 right-0 flex justify-center">
             <div className="flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10">
                 <Maximize2 size={12} className="text-brand-400" />
                 <span className="text-[10px] font-bold tracking-[0.2em] text-white/90">
-                  {isProcessing ? 'ANALISANDO...' : 'APONTE E CAPTURE'}
+                  {isProcessing ? 'ANALISANDO...' : 'TOQUE PARA CAPTURAR'}
                 </span>
              </div>
         </div>
-      </div>
-      
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
-        <button
-            onClick={handleManualCapture}
-            disabled={isProcessing || appState !== AppState.IDLE || isOffline || !isCameraReady}
-            className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-lg border-4 border-white/50 flex items-center justify-center transition-all duration-200 active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-2xl shadow-black/50"
-        >
-            <div className="w-16 h-16 rounded-full bg-white/90"></div>
-        </button>
       </div>
 
       <style>{`

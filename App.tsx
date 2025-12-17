@@ -284,23 +284,23 @@ const App: React.FC = () => {
       <div className="h-safe-top bg-black w-full shrink-0"></div>
 
       {/* Header */}
-      <header className="pt-4 pb-2 px-4 bg-gradient-to-b from-black to-transparent z-10 flex justify-between items-center shrink-0">
+      <header className="pt-4 pb-2 px-4 bg-gradient-to-b from-black to-transparent z-10 flex justify-between items-center shrink-0 gap-4">
         {activeTab === ActiveTab.CALCULATOR ? (
             <button 
               onClick={handleLaunchFromCalc}
               disabled={calculatorLaunchValue === 0}
-              className="h-12 text-sm bg-dark-800 border border-brand-500/30 rounded-2xl flex items-center justify-center gap-2 text-brand-500 font-bold uppercase tracking-wider hover:bg-brand-500 hover:text-black transition-all active:scale-95 shadow-lg shadow-brand-500/10 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation px-4"
+              className="h-12 text-sm bg-dark-800 border border-brand-500/30 rounded-2xl flex items-center justify-center gap-2 text-brand-500 font-bold uppercase tracking-wider hover:bg-brand-500 hover:text-black transition-all active:scale-95 shadow-lg shadow-brand-500/10 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation px-4 whitespace-nowrap shrink min-w-0"
             >
-              <Plus size={16} strokeWidth={3} />
-              Lançar R$ {calculatorLaunchValue.toFixed(2)}
+              <Plus size={16} strokeWidth={3} className="shrink-0" />
+              <span className="truncate">Lançar R$ {calculatorLaunchValue.toFixed(2)}</span>
             </button>
           ) : (
-            <h1 className="text-2xl font-black italic tracking-tighter text-white">
+            <h1 className="text-2xl font-black italic tracking-tighter text-white truncate">
               Supermarket Calculadora
             </h1>
         )}
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 shrink-0">
           {isOffline && (
             <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-bold bg-dark-900/50 px-2 py-1 rounded-full border border-dark-800">
               <WifiOff size={12} strokeWidth={3} />

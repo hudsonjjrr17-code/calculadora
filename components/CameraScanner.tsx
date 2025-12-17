@@ -9,10 +9,15 @@ interface CameraScannerProps {
   appState: AppState;
 }
 
+// Regex para encontrar preços de forma eficiente no loop de scan
+const priceRegex = /(?:R\$?\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+[,.]\d{2})/;
+
 export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProcessing, isOffline, appState }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const scanIntervalRef = useRef<number | null>(null);
+  const textDetectorRef = useRef<any | null>(null);
 
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isPermissionError, setIsPermissionError] = useState(false);
@@ -34,18 +39,14 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       setStreamError("CÂMERA INDISPONÍVEL (Requer HTTPS)");
       return;
     }
-
-    try {
-      if (navigator.permissions && navigator.permissions.query) {
-        const permissionStatus = await navigator.permissions.query({ name: 'camera' as PermissionName });
-        if (permissionStatus.state === 'denied') {
-          setStreamError("PERMISSÃO DA CÂMERA NEGADA");
-          setIsPermissionError(true);
-          return;
-        }
+    
+    // Inicializa o TextDetector se disponível
+    if ('TextDetector' in window && !textDetectorRef.current) {
+      try {
+        textDetectorRef.current = new (window as any).TextDetector();
+      } catch (e) {
+        console.warn("Falha ao inicializar TextDetector:", e);
       }
-    } catch (e) {
-      console.warn("Permissions API check failed, proceeding.", e);
     }
 
     try {
@@ -76,8 +77,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     }
   };
   
-  const handleManualCapture = () => {
-    if (!videoRef.current || !canvasRef.current || appState !== AppState.IDLE) return;
+  const takeHighResPicture = () => {
+    if (!videoRef.current || !canvasRef.current) return null;
     
     if (navigator.vibrate) navigator.vibrate(20);
     setFlashActive(true);
@@ -91,35 +92,39 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const base64 = canvas.toDataURL('image/jpeg', 0.90);
+      return canvas.toDataURL('image/jpeg', 0.90);
+    }
+    return null;
+  }
+  
+  const handleManualCapture = () => {
+    if (appState !== AppState.IDLE) return;
+    const base64 = takeHighResPicture();
+    if (base64) {
       onCapture(base64);
     }
   };
-  
-  const handleViewfinderTap = async (e: React.MouseEvent) => {
-    if (!streamRef.current || !videoRef.current || appState !== AppState.IDLE) return;
 
-    const track = streamRef.current.getVideoTracks()[0];
-    const capabilities = track.getCapabilities();
-
-    if ((capabilities as any).pointsOfInterest) {
-      const rect = videoRef.current.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      const y = (e.clientY - rect.top) / rect.height;
-
-      setFocusIndicator({ x: e.clientX - rect.left, y: e.clientY - rect.top, visible: true });
-      setTimeout(() => setFocusIndicator(f => f ? { ...f, visible: false } : null), 1000);
-
-      try {
-        await (track as any).applyConstraints({
-          advanced: [{ pointsOfInterest: [{ x, y }] }]
-        });
-      } catch (error) {
-        console.error('Failed to set focus point:', error);
-      }
+  const scanFrameForPrice = async () => {
+    if (!videoRef.current || videoRef.current.paused || videoRef.current.ended || appState !== AppState.IDLE || !textDetectorRef.current) {
+        return;
     }
-    
-    handleManualCapture();
+
+    try {
+        const detectedTexts = await textDetectorRef.current.detect(videoRef.current);
+        for (const text of detectedTexts) {
+            if (priceRegex.test(text.rawValue)) {
+                // Preço encontrado, aciona a captura!
+                const base64 = takeHighResPicture();
+                if (base64) {
+                  onCapture(base64);
+                }
+                return; // Para o scan até o próximo ciclo
+            }
+        }
+    } catch (e) {
+        // Ignora erros de detecção para manter o loop rodando
+    }
   };
 
   useEffect(() => {
@@ -130,8 +135,30 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      if (scanIntervalRef.current) {
+        clearInterval(scanIntervalRef.current);
+      }
     };
   }, [isOffline]);
+  
+  // Efeito para controlar o loop de escaneamento automático
+  useEffect(() => {
+    if (appState === AppState.IDLE && isCameraReady && textDetectorRef.current) {
+      // Começa o loop de escaneamento
+      scanIntervalRef.current = window.setInterval(scanFrameForPrice, 750); // Escaneia a cada 750ms
+    } else {
+      // Para o loop se o app estiver ocupado ou a câmera não pronta
+      if (scanIntervalRef.current) {
+        clearInterval(scanIntervalRef.current);
+        scanIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (scanIntervalRef.current) {
+        clearInterval(scanIntervalRef.current);
+      }
+    };
+  }, [appState, isCameraReady]);
 
   const toggleTorch = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -164,11 +191,11 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     );
   }
 
-  const cornerClass = `absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200 border-brand-400/50`;
+  const cornerClass = `absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200 ${appState === AppState.IDLE ? 'border-brand-400/50' : 'border-gray-600/50'}`;
 
   return (
     <div 
-      onClick={handleViewfinderTap}
+      onClick={handleManualCapture}
       className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 cursor-pointer"
     >
       {isOffline && (
@@ -207,10 +234,10 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           <div className={`${cornerClass} -bottom-2 -right-2 border-b border-r rounded-br-xl`}></div>
         </div>
         <div className="absolute bottom-6 left-0 right-0 flex justify-center">
-            <div className="flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10">
-                <Maximize2 size={12} className="text-brand-400" />
+            <div className={`flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 transition-all ${appState === AppState.IDLE ? 'animate-pulse-fast' : ''}`}>
+                <Maximize2 size={12} className={appState === AppState.IDLE ? 'text-brand-400' : 'text-gray-500'} />
                 <span className="text-[10px] font-bold tracking-[0.2em] text-white/90">
-                  {isProcessing ? 'ANALISANDO...' : 'TOQUE PARA CAPTURAR'}
+                  {isProcessing ? 'ANALISANDO...' : 'PROCURANDO PREÇO...'}
                 </span>
              </div>
         </div>

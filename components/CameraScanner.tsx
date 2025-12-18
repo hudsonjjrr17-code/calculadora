@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera, AlertTriangle, Zap, ZapOff, Maximize2, Lock, WifiOff, MousePointerClick } from 'lucide-react';
+import { Camera, AlertTriangle, Zap, ZapOff, Lock, WifiOff, MousePointerClick } from 'lucide-react';
 import { AppState } from '../types';
-import { initializeOfflineDetectors, detectFromVideoFrame } from '../services/offlineOcrService';
 
 interface CameraScannerProps {
   onCapture: (base64Image: string, detectedTexts: any[], detectedBarcodes: any[]) => void;
@@ -10,31 +9,17 @@ interface CameraScannerProps {
   appState: AppState;
 }
 
-// Regex to find prices efficiently in the scan loop
-const priceRegex = /(?:R\$?\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+[,.]\d{2})/;
-
 export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProcessing, isOffline, appState }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const isDetectingRef = useRef(false);
   
-  const [isDetectorSupported, setIsDetectorSupported] = useState(true);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isPermissionError, setIsPermissionError] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [flashActive, setFlashActive] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
-
-  // Pré-inicializa os detectores offline para escaneamentos subsequentes mais rápidos.
-  useEffect(() => {
-    const initDetectors = async () => {
-      const { textSupported, barcodeSupported } = await initializeOfflineDetectors();
-      setIsDetectorSupported(textSupported || barcodeSupported);
-    };
-    initDetectors();
-  }, []);
 
   const startCamera = async () => {
     if (streamRef.current) {
@@ -103,10 +88,11 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     return null;
   }
   
-  const handleManualCapture = () => {
+  const handleTapCapture = () => {
     if (appState !== AppState.IDLE || !videoRef.current) return;
     const base64 = takeHighResPicture();
     if (base64) {
+      // Offline detectors are bypassed; send empty arrays and let the online service handle it.
       onCapture(base64, [], []);
     }
   };
@@ -120,61 +106,6 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     };
   }, [isOffline]);
   
-  useEffect(() => {
-    let animationFrameId: number;
-
-    const scanFrame = async () => {
-      // Main guard: If conditions aren't right, queue the next frame and try again.
-      // This keeps the loop alive while waiting for the video or for the app to be ready.
-      if (appState !== AppState.IDLE || isDetectingRef.current || !videoRef.current || videoRef.current.paused || videoRef.current.readyState < 3) {
-        animationFrameId = requestAnimationFrame(scanFrame);
-        return;
-      }
-
-      isDetectingRef.current = true;
-
-      try {
-        const { detectedTexts, detectedBarcodes } = await detectFromVideoFrame(videoRef.current);
-        
-        // After async detection, re-check app state. If it changed, abort logic for this frame,
-        // but allow the loop to continue to the next frame.
-        if (appState === AppState.IDLE) {
-          const priceFound = detectedTexts.some((text: any) => priceRegex.test(text.rawValue));
-          const barcodeFound = detectedBarcodes && detectedBarcodes.length > 0;
-
-          if (priceFound || barcodeFound) {
-            const base64 = takeHighResPicture();
-            if (base64) {
-              // Success: Stop the loop by calling onCapture and returning.
-              // The parent component's state change will restart the loop via this useEffect.
-              onCapture(base64, detectedTexts, detectedBarcodes);
-              isDetectingRef.current = false; // Reset ref before exiting
-              return; 
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Erro no loop de escaneamento.', e);
-      }
-      
-      // If we reach here, nothing was found or the state changed mid-detection.
-      // Reset the ref and queue the next frame to continue scanning.
-      isDetectingRef.current = false;
-      if (appState === AppState.IDLE) {
-        animationFrameId = requestAnimationFrame(scanFrame);
-      }
-    };
-
-    if (appState === AppState.IDLE && isCameraReady && isDetectorSupported) {
-      animationFrameId = requestAnimationFrame(scanFrame);
-    }
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-      isDetectingRef.current = false; // Ensure ref is reset on cleanup
-    }
-  }, [appState, isCameraReady, isDetectorSupported, onCapture]);
-
   const toggleTorch = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (navigator.vibrate) navigator.vibrate(10);
@@ -206,9 +137,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     );
   }
 
-  const canAutoScan = isDetectorSupported;
-
-  // Determina os estilos do overlay do scanner com base no estado
+  // Determines the scanner overlay styles based on state
   const getScannerStyles = () => {
     if (isProcessing) {
       return {
@@ -217,20 +146,13 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       };
     }
     if (appState === AppState.IDLE) {
-      if (canAutoScan) {
-        return {
-          corner: 'animate-scanner-breathing', // A animação fornece a cor da marca
-          shadow: 'shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]',
-        };
-      } else {
-        // Modo de escaneamento manual
-        return {
-          corner: 'border-blue-500',
-          shadow: 'shadow-[0_0_0_9999px_rgba(59,130,246,0.1)]',
-        };
-      }
+      // Tap-to-scan mode style
+      return {
+        corner: 'border-brand-500/80',
+        shadow: 'shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]',
+      };
     }
-    // Estado inativo padrão (ex: confirmando)
+    // Default inactive state (e.g., confirming)
     return {
       corner: 'border-gray-700',
       shadow: 'shadow-[0_0_0_9999px_rgba(0,0,0,0.7)]',
@@ -243,14 +165,13 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
   const getStatusText = () => {
     if (isProcessing) return 'ANALISANDO...';
-    if (!canAutoScan) return 'TOQUE PARA ESCANEAR';
-    return 'PROCURANDO PREÇO/CÓDIGO...';
+    return 'TOQUE PARA ESCANEAR';
   };
 
   return (
     <div 
-      onClick={!canAutoScan ? handleManualCapture : undefined}
-      className={`relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 ${!canAutoScan ? 'cursor-pointer' : 'cursor-default'}`}
+      onClick={handleTapCapture}
+      className="relative w-full h-full bg-black rounded-[32px] overflow-hidden shadow-2xl border-4 border-dark-900 isolate ring-1 ring-white/10 cursor-pointer"
     >
       {isOffline && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 text-center p-4">
@@ -283,11 +204,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           <div className={`${cornerClass} -bottom-2 -right-2 border-b border-r rounded-br-xl`}></div>
         </div>
         <div className="absolute bottom-6 left-0 right-0 flex justify-center">
-            <div className={`flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 transition-all ${appState === AppState.IDLE && canAutoScan ? 'animate-pulse-fast' : ''}`}>
-                {canAutoScan ?
-                  <Maximize2 size={12} className={appState === AppState.IDLE ? 'text-brand-400' : 'text-gray-500'} /> :
-                  <MousePointerClick size={12} className={appState === AppState.IDLE ? 'text-brand-400' : 'text-gray-500'} />
-                }
+            <div className={`flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 transition-all ${appState === AppState.IDLE ? 'animate-pulse-fast' : ''}`}>
+                <MousePointerClick size={12} className={appState === AppState.IDLE ? 'text-brand-400' : 'text-gray-500'} />
                 <span className="text-[10px] font-bold tracking-[0.2em] text-white/90">
                   {getStatusText()}
                 </span>

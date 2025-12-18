@@ -12,7 +12,7 @@ interface CameraScannerProps {
   appState: AppState;
 }
 
-const AUTO_SCAN_INTERVAL_MS = 1000; // Analisa a cada 1 segundo
+const AUTO_SCAN_INTERVAL_MS = 1800; // Intervalo aumentado para tornar o scanner menos agressivo e o toque mais responsivo
 
 export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProcessing, isOffline, appState }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -225,7 +225,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
         playsInline
         muted
         onCanPlay={() => setIsCameraReady(true)}
-        className={`w-full h-full object-cover transition-all duration-300 ${isProcessing || isOffline ? 'opacity-50 blur-sm' : 'opacity-100'} ${flashActive ? 'scale-110 brightness-150' : ''}`}
+        className={`w-full h-full object-cover pointer-events-none transition-all duration-300 ${isProcessing || isOffline ? 'opacity-50 blur-sm' : 'opacity-100'} ${flashActive ? 'scale-110 brightness-150' : ''}`}
       />
       <canvas ref={canvasRef} className="hidden" />
       

@@ -124,7 +124,8 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     let animationFrameId: number;
 
     const scanFrame = async () => {
-      // Garante que o componente está em estado de escanear
+      // Main guard: If conditions aren't right, queue the next frame and try again.
+      // This keeps the loop alive while waiting for the video or for the app to be ready.
       if (appState !== AppState.IDLE || isDetectingRef.current || !videoRef.current || videoRef.current.paused || videoRef.current.readyState < 3) {
         animationFrameId = requestAnimationFrame(scanFrame);
         return;
@@ -133,32 +134,32 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       isDetectingRef.current = true;
 
       try {
-        // Usa o serviço de detecção offline otimizado
         const { detectedTexts, detectedBarcodes } = await detectFromVideoFrame(videoRef.current);
         
-        // Aborta se o estado mudou durante a detecção assíncrona
-        if (appState !== AppState.IDLE) {
-          isDetectingRef.current = false;
-          return;
-        }
+        // After async detection, re-check app state. If it changed, abort logic for this frame,
+        // but allow the loop to continue to the next frame.
+        if (appState === AppState.IDLE) {
+          const priceFound = detectedTexts.some((text: any) => priceRegex.test(text.rawValue));
+          const barcodeFound = detectedBarcodes && detectedBarcodes.length > 0;
 
-        const priceFound = detectedTexts.some((text: any) => priceRegex.test(text.rawValue));
-        const barcodeFound = detectedBarcodes && detectedBarcodes.length > 0;
-
-        if (priceFound || barcodeFound) {
-          const base64 = takeHighResPicture();
-          if (base64) {
-            onCapture(base64, detectedTexts, detectedBarcodes);
-            isDetectingRef.current = false;
-            return; // Para de escanear até o estado voltar para IDLE
+          if (priceFound || barcodeFound) {
+            const base64 = takeHighResPicture();
+            if (base64) {
+              // Success: Stop the loop by calling onCapture and returning.
+              // The parent component's state change will restart the loop via this useEffect.
+              onCapture(base64, detectedTexts, detectedBarcodes);
+              isDetectingRef.current = false; // Reset ref before exiting
+              return; 
+            }
           }
         }
       } catch (e) {
         console.warn('Erro no loop de escaneamento.', e);
-      } finally {
-        isDetectingRef.current = false;
       }
       
+      // If we reach here, nothing was found or the state changed mid-detection.
+      // Reset the ref and queue the next frame to continue scanning.
+      isDetectingRef.current = false;
       if (appState === AppState.IDLE) {
         animationFrameId = requestAnimationFrame(scanFrame);
       }
@@ -170,6 +171,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      isDetectingRef.current = false; // Ensure ref is reset on cleanup
     }
   }, [appState, isCameraReady, isDetectorSupported, onCapture]);
 

@@ -67,7 +67,16 @@ export const ManualEntry = forwardRef<ManualEntryRef, ManualEntryProps>(({ onAdd
   };
 
   const handleOperation = (op: string) => {
-    triggerHaptic(12); // Slightly stronger for operations
+    triggerHaptic(12);
+
+    // If an operator is pressed immediately after another (e.g., "5 * +"),
+    // just update the operator instead of performing an incorrect calculation.
+    // The `operator` check correctly handles starting a new chain after "=".
+    if (waitingForNewValue && operator) {
+      setOperator(op);
+      return;
+    }
+
     const current = parseFloat(display);
 
     if (prevValue === null) {

@@ -205,22 +205,45 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   }
 
   const canAutoScan = isDetectorSupported;
-  let cornerClass = 'absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200';
-  if (appState === AppState.IDLE) {
-    if (canAutoScan) {
-      cornerClass += ' animate-scanner-breathing';
-    } else {
-      cornerClass += ' border-gray-500';
+
+  // Determina os estilos do overlay do scanner com base no estado
+  const getScannerStyles = () => {
+    if (isProcessing) {
+      return {
+        corner: 'border-yellow-400 animate-pulse',
+        shadow: 'shadow-[0_0_0_9999px_rgba(250,204,21,0.15)]',
+      };
     }
-  } else {
-    cornerClass += ' border-gray-600/50';
-  }
-  
+    if (appState === AppState.IDLE) {
+      if (canAutoScan) {
+        return {
+          corner: 'animate-scanner-breathing', // A animação fornece a cor da marca
+          shadow: 'shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]',
+        };
+      } else {
+        // Modo de escaneamento manual
+        return {
+          corner: 'border-blue-500',
+          shadow: 'shadow-[0_0_0_9999px_rgba(59,130,246,0.1)]',
+        };
+      }
+    }
+    // Estado inativo padrão (ex: confirmando)
+    return {
+      corner: 'border-gray-700',
+      shadow: 'shadow-[0_0_0_9999px_rgba(0,0,0,0.7)]',
+    };
+  };
+
+  const scannerStyles = getScannerStyles();
+  const cornerClass = `absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-300 ${scannerStyles.corner}`;
+  const shadowBoxClass = `absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%] bg-transparent rounded-3xl transition-all duration-300 ${scannerStyles.shadow}`;
+
   const getStatusText = () => {
     if (isProcessing) return 'ANALISANDO...';
     if (!canAutoScan) return 'TOQUE PARA ESCANEAR';
     return 'PROCURANDO PREÇO/CÓDIGO...';
-  }
+  };
 
   return (
     <div 
@@ -248,7 +271,9 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       <div className={`absolute inset-0 bg-white/80 pointer-events-none transition-opacity duration-200 z-50 ${flashActive ? 'opacity-100' : 'opacity-0'}`} />
 
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute inset-0"><div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%] bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] rounded-3xl"></div></div>
+        <div className="absolute inset-0">
+          <div className={shadowBoxClass}></div>
+        </div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[45%]">
           <div className={`${cornerClass} -top-2 -left-2 border-t border-l rounded-tl-xl`}></div>
           <div className={`${cornerClass} -top-2 -right-2 border-t border-r rounded-tr-xl`}></div>

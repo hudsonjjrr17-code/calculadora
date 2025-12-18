@@ -1,6 +1,9 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Camera, AlertTriangle, Zap, ZapOff, Lock, WifiOff, MousePointerClick } from 'lucide-react';
 import { AppState } from '../types';
+import { initializeOfflineDetectors, detectFromVideoFrame } from '../services/offlineOcrService';
+import { parseDetectedTexts } from '../services/ocrUtils';
+
 
 interface CameraScannerProps {
   onCapture: (base64Image: string, detectedTexts: any[], detectedBarcodes: any[]) => void;
@@ -9,10 +12,14 @@ interface CameraScannerProps {
   appState: AppState;
 }
 
+const AUTO_SCAN_INTERVAL_MS = 1000; // Analisa a cada 1 segundo
+
 export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProcessing, isOffline, appState }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const analysisLoopRef = useRef<number | null>(null);
+  const lastScanTimeRef = useRef(0);
   
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isPermissionError, setIsPermissionError] = useState(false);
@@ -67,13 +74,9 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       }
     }
   };
-  
+
   const takeHighResPicture = () => {
-    if (!videoRef.current || !canvasRef.current || appState !== AppState.IDLE) return null;
-    
-    if (navigator.vibrate) navigator.vibrate(20);
-    setFlashActive(true);
-    setTimeout(() => setFlashActive(false), 150);
+    if (!videoRef.current || !canvasRef.current) return null;
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -88,20 +91,58 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     return null;
   }
   
+  // Manual tap capture
   const handleTapCapture = () => {
     if (appState !== AppState.IDLE || !videoRef.current) return;
+    if (navigator.vibrate) navigator.vibrate(20);
+    setFlashActive(true);
+    setTimeout(() => setFlashActive(false), 150);
+    
     const base64 = takeHighResPicture();
     if (base64) {
-      // Offline detectors are bypassed; send empty arrays and let the online service handle it.
       onCapture(base64, [], []);
     }
   };
 
+  // Automatic scan capture (triggered by offline detector)
+  const handleAutoCapture = (detectedTexts: any[], detectedBarcodes: any[]) => {
+    if (appState !== AppState.IDLE || !videoRef.current) return;
+    const base64 = takeHighResPicture();
+    if (base64) {
+      onCapture(base64, detectedTexts, detectedBarcodes);
+    }
+  }
+
+  const runAnalysisLoop = async () => {
+    if (appState === AppState.IDLE && videoRef.current && !isOffline && document.visibilityState === 'visible') {
+      const now = Date.now();
+      if (now - lastScanTimeRef.current > AUTO_SCAN_INTERVAL_MS) {
+        lastScanTimeRef.current = now;
+        const { detectedTexts, detectedBarcodes } = await detectFromVideoFrame(videoRef.current);
+        
+        // If offline detection finds a valid price, trigger a high-res capture
+        const offlineResult = parseDetectedTexts(detectedTexts);
+        if (offlineResult && offlineResult.price > 0) {
+          handleAutoCapture(detectedTexts, detectedBarcodes);
+        }
+      }
+    }
+    analysisLoopRef.current = requestAnimationFrame(runAnalysisLoop);
+  };
+  
   useEffect(() => {
-    if (!isOffline) startCamera();
+    if (!isOffline) {
+      initializeOfflineDetectors();
+      startCamera();
+      analysisLoopRef.current = requestAnimationFrame(runAnalysisLoop);
+    }
+    
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (analysisLoopRef.current) {
+        cancelAnimationFrame(analysisLoopRef.current);
       }
     };
   }, [isOffline]);
@@ -137,7 +178,6 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     );
   }
 
-  // Determines the scanner overlay styles based on state
   const getScannerStyles = () => {
     if (isProcessing) {
       return {
@@ -146,13 +186,11 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       };
     }
     if (appState === AppState.IDLE) {
-      // Tap-to-scan mode style
       return {
         corner: 'border-brand-500/80',
         shadow: 'shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]',
       };
     }
-    // Default inactive state (e.g., confirming)
     return {
       corner: 'border-gray-700',
       shadow: 'shadow-[0_0_0_9999px_rgba(0,0,0,0.7)]',
@@ -165,7 +203,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
 
   const getStatusText = () => {
     if (isProcessing) return 'ANALISANDO...';
-    return 'TOQUE PARA ESCANEAR';
+    return 'APONTE PARA A ETIQUETA';
   };
 
   return (

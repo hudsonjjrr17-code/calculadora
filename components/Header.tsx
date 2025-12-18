@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ActiveTab } from '../types';
-import { WifiOff, Plus, Download, X, Smartphone } from 'lucide-react';
+import { WifiOff, Plus, Download, X, Smartphone, ShoppingCart } from 'lucide-react';
 
 interface AppHeaderProps {
   activeTab: ActiveTab;
@@ -52,8 +52,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               <span className="truncate">Lançar R$ {calculatorLaunchValue.toFixed(2)}</span>
             </button>
           ) : (
-            <h1 className="text-2xl font-black italic tracking-tighter text-red-500 truncate">
-              Supermarket Calculadora
+            <h1 className="text-2xl font-black italic tracking-tighter text-white flex items-center gap-2.5 truncate">
+              <ShoppingCart size={24} className="text-brand-400 shrink-0" />
+              <span className="truncate">Calculadora</span>
             </h1>
         )}
         

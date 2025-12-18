@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Camera, AlertTriangle, Zap, ZapOff, Maximize2, Lock, WifiOff, MousePointerClick } from 'lucide-react';
 import { AppState } from '../types';
+import { initializeOfflineDetectors, detectFromVideoFrame } from '../services/offlineOcrService';
 
 interface CameraScannerProps {
   onCapture: (base64Image: string, detectedTexts: any[], detectedBarcodes: any[]) => void;
@@ -16,18 +17,24 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const textDetectorRef = useRef<any | null>(null);
-  const barcodeDetectorRef = useRef<any | null>(null);
   const isDetectingRef = useRef(false);
   
-  const [isTextDetectorSupported, setIsTextDetectorSupported] = useState(true);
-  const [isBarcodeDetectorSupported, setIsBarcodeDetectorSupported] = useState(true);
+  const [isDetectorSupported, setIsDetectorSupported] = useState(true);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isPermissionError, setIsPermissionError] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [flashActive, setFlashActive] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
+
+  // Pré-inicializa os detectores offline para escaneamentos subsequentes mais rápidos.
+  useEffect(() => {
+    const initDetectors = async () => {
+      const { textSupported, barcodeSupported } = await initializeOfflineDetectors();
+      setIsDetectorSupported(textSupported || barcodeSupported);
+    };
+    initDetectors();
+  }, []);
 
   const startCamera = async () => {
     if (streamRef.current) {
@@ -41,33 +48,6 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       setStreamError("CÂMERA INDISPONÍVEL (Requer HTTPS)");
       return;
     }
-    
-    // Initialize Text Detector
-    if ('TextDetector' in window && !textDetectorRef.current) {
-      try {
-        textDetectorRef.current = new (window as any).TextDetector();
-        setIsTextDetectorSupported(true);
-      } catch (e) {
-        console.warn("TextDetector failed to initialize:", e);
-        setIsTextDetectorSupported(false);
-      }
-    } else if (!('TextDetector' in window)) {
-       setIsTextDetectorSupported(false);
-    }
-
-    // Initialize Barcode Detector
-    if ('BarcodeDetector' in window && !barcodeDetectorRef.current) {
-      try {
-        barcodeDetectorRef.current = new (window as any).BarcodeDetector({ formats: ['ean_13', 'upc_a', 'qr_code', 'code_128'] });
-        setIsBarcodeDetectorSupported(true);
-      } catch(e) {
-        console.warn("BarcodeDetector failed to initialize:", e);
-        setIsBarcodeDetectorSupported(false);
-      }
-    } else if (!('BarcodeDetector' in window)) {
-      setIsBarcodeDetectorSupported(false);
-    }
-
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -87,7 +67,6 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
       const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
       if (capabilities.torch) setHasTorch(true);
       
-      // Ensure continuous focus is applied if supported
       if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
         await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] } as any);
       }
@@ -142,30 +121,26 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
   }, [isOffline]);
   
   useEffect(() => {
+    let animationFrameId: number;
+
     const scanFrame = async () => {
-      if (appState !== AppState.IDLE || !isCameraReady || isDetectingRef.current || !videoRef.current || videoRef.current.paused) {
+      // Garante que o componente está em estado de escanear
+      if (appState !== AppState.IDLE || isDetectingRef.current || !videoRef.current || videoRef.current.paused || videoRef.current.readyState < 3) {
+        animationFrameId = requestAnimationFrame(scanFrame);
         return;
       }
 
       isDetectingRef.current = true;
-      const video = videoRef.current;
 
       try {
-        const detectionPromises = [];
-        if (textDetectorRef.current) detectionPromises.push(textDetectorRef.current.detect(video));
-        if (barcodeDetectorRef.current) detectionPromises.push(barcodeDetectorRef.current.detect(video));
+        // Usa o serviço de detecção offline otimizado
+        const { detectedTexts, detectedBarcodes } = await detectFromVideoFrame(videoRef.current);
         
-        if (detectionPromises.length === 0) {
-            isDetectingRef.current = false;
-            return;
+        // Aborta se o estado mudou durante a detecção assíncrona
+        if (appState !== AppState.IDLE) {
+          isDetectingRef.current = false;
+          return;
         }
-
-        const results = await Promise.all(detectionPromises);
-        
-        if (appState !== AppState.IDLE) return;
-        
-        const detectedTexts = textDetectorRef.current ? results[0] : [];
-        const detectedBarcodes = barcodeDetectorRef.current ? results[textDetectorRef.current ? 1 : 0] : [];
 
         const priceFound = detectedTexts.some((text: any) => priceRegex.test(text.rawValue));
         const barcodeFound = detectedBarcodes && detectedBarcodes.length > 0;
@@ -174,25 +149,29 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
           const base64 = takeHighResPicture();
           if (base64) {
             onCapture(base64, detectedTexts, detectedBarcodes);
-            return;
+            isDetectingRef.current = false;
+            return; // Para de escanear até o estado voltar para IDLE
           }
         }
       } catch (e) {
-        console.warn('Detection failed for a frame.', e);
+        console.warn('Erro no loop de escaneamento.', e);
       } finally {
         isDetectingRef.current = false;
       }
       
       if (appState === AppState.IDLE) {
-        requestAnimationFrame(scanFrame);
+        animationFrameId = requestAnimationFrame(scanFrame);
       }
     };
 
-    const canAutoScan = isTextDetectorSupported || isBarcodeDetectorSupported;
-    if (appState === AppState.IDLE && isCameraReady && canAutoScan) {
-      scanFrame();
+    if (appState === AppState.IDLE && isCameraReady && isDetectorSupported) {
+      animationFrameId = requestAnimationFrame(scanFrame);
     }
-  }, [appState, isCameraReady, isTextDetectorSupported, isBarcodeDetectorSupported, onCapture]);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    }
+  }, [appState, isCameraReady, isDetectorSupported, onCapture]);
 
   const toggleTorch = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -204,7 +183,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
         await track.applyConstraints({ advanced: [{ torch: newStatus } as any] });
         setIsTorchOn(newStatus);
       } catch (err) {
-        console.error("Error toggling torch", err);
+        console.error("Erro ao alternar a lanterna", err);
       }
     }
   };
@@ -225,7 +204,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, isProce
     );
   }
 
-  const canAutoScan = isTextDetectorSupported || isBarcodeDetectorSupported;
+  const canAutoScan = isDetectorSupported;
   let cornerClass = 'absolute w-10 h-10 border-[6px] rounded-xl transition-colors duration-200';
   if (appState === AppState.IDLE) {
     if (canAutoScan) {
